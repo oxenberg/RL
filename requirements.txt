@@ -20,6 +20,7 @@ chardet==3.0.4
 cloudpickle @ file:///tmp/build/80754af9/cloudpickle_1598884132938/work
 colorama @ file:///tmp/build/80754af9/colorama_1603211150991/work
 cryptography==2.3.1
+cycler==0.10.0
 decorator==4.4.2
 defusedxml==0.6.0
 diff-match-patch @ file:///tmp/build/80754af9/diff-match-patch_1594828741838/work
@@ -50,9 +51,11 @@ jupyter-core==4.6.3
 jupyterlab-pygments @ file:///tmp/build/80754af9/jupyterlab_pygments_1601490720602/work
 Keras-Preprocessing==1.1.2
 keyring @ file:///C:/ci/keyring_1601488971022/work
+kiwisolver==1.3.1
 lazy-object-proxy==1.4.3
 Markdown==3.3.3
 MarkupSafe @ file:///C:/ci/markupsafe_1594405949945/work
+matplotlib==3.3.3
 mccabe==0.6.1
 mistune @ file:///C:/ci/mistune_1594373272338/work
 nbclient @ file:///tmp/build/80754af9/nbclient_1602783176460/work
@@ -70,6 +73,7 @@ parso==0.7.0
 pathtools==0.1.2
 pexpect @ file:///C:/ci/pexpect_1594383465186/work
 pickleshare @ file:///C:/ci/pickleshare_1594374056827/work
+Pillow==8.0.1
 pluggy==0.13.1
 prompt-toolkit @ file:///tmp/build/80754af9/prompt-toolkit_1602688806899/work
 protobuf==3.13.0
