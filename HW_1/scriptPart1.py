@@ -23,7 +23,7 @@ class FrozenAgent:
         '''
         self.env = gym.make('FrozenLake-v0')
         self.num_actions = self.env.action_space.n
-        
+
         # ToDo: check is_slippery variable in make
         # ToDo: verify on which board size we play
         # ToDo: verify hyperparameter values
@@ -33,7 +33,8 @@ class FrozenAgent:
 
     def _sampleActionFromQtable(self, state: int, epsilon):
         max_reward = np.max(self.Qtable[state, :])
-        best_action = np.random.choice([i for i, q_val in enumerate(self.Qtable[state, :]) if q_val == max_reward])
+        best_action = np.random.choice(
+            [i for i, q_val in enumerate(self.Qtable[state, :]) if q_val == max_reward])
         sampling_distribution = [1 - epsilon if i == best_action else epsilon / (self.num_actions - 1)
                                  for i in range(self.num_actions)]
         return np.random.choice(self.actions, p=sampling_distribution)
@@ -41,12 +42,12 @@ class FrozenAgent:
     def train(self, maxEpochs=5000, alpha=0.01, epsilon=0.1, lambd=0.97, maxSteps=100):
         '''
         train the agent on the env with the Q-learning algo
-        
+
         params:
 
         maxEpochs (float) -
         alpha (float) -
-        lambd (float) -
+        gamma (float) -
         epsilon(float) - for epsilon greedy sampling algorithm
 
         Returns
@@ -59,7 +60,7 @@ class FrozenAgent:
         self.rewards = []
         self.stepsPerEpoch = []
         self.Qtable = np.zeros(
-                    (self.env.observation_space.n, self.num_actions))
+            (self.env.observation_space.n, self.num_actions))
         sampleSteps = [200, 500]
         currentState = self.env.reset()
         overallSteps = 0
@@ -68,7 +69,8 @@ class FrozenAgent:
             step = 0
             overallReward = 0
             while (True):
-                randomAction = self._sampleActionFromQtable(currentState, epsilon)
+                randomAction = self._sampleActionFromQtable(
+                    currentState, epsilon)
                 newState, reward, done, info = self.env.step(randomAction)
                 step += 1
                 epsilon *= 1 / step ** (0.01)
@@ -87,7 +89,7 @@ class FrozenAgent:
 
                 maxQ = max(self.Qtable[newState])
 
-                target = reward + lambd * maxQ
+                target = reward + gamma * maxQ
                 self.Qtable[currentState, randomAction] += (alpha *
                                                             (target - self.Qtable[currentState, randomAction]))
 
@@ -162,7 +164,7 @@ class FrozenAgent:
 '''
 
 
-def gridSearch(parmas, agent, nSearch =10, maxEpochs=5000,maxN = False, aveOver = 10):
+def gridSearch(parmas, agent, nSearch=10, maxEpochs=5000, maxN=False, aveOver=10):
     paramsList = list(ParameterGrid(parmas))
     shuffle(paramsList)
 
@@ -171,18 +173,18 @@ def gridSearch(parmas, agent, nSearch =10, maxEpochs=5000,maxN = False, aveOver 
 
     gridSearchResults = []
     for paramsDict in tqdm(paramsList[:nSearch]):
-        aveReward = 0  
+        aveReward = 0
         for _ in range(aveOver):
             agent.train(maxEpochs=maxEpochs,
                         alpha=paramsDict["alpha"],
                         epsilon=paramsDict["epsilon"],
                         lambd=paramsDict["lambd"])
-            aveReward+= sum(agent.rewards)
+            aveReward += sum(agent.rewards)
         paramsDict['total_reward'] = aveReward/aveOver
         gridSearchResults.append(paramsDict)
 
     hyperparameterTable = pd.DataFrame(gridSearchResults)
-    hyperparameterTable.sort_values("total_reward",inplace = True)
+    hyperparameterTable.sort_values("total_reward", inplace=True)
     hyperparameterTable.to_csv("HP.csv")
     print(hyperparameterTable)
 
@@ -193,9 +195,9 @@ if __name__ == '__main__':
         params = {"alpha": list(np.arange(0.01, 0.05, 0.01)),
                   "epsilon": list(np.arange(0.01, 0.15, 0.01)),
                   "lambd": list(np.arange(0.9, 0.98, 0.01))}
-        gridSearch(params, agent, maxN = True)
+        gridSearch(params, agent, maxN=True)
     else:
-        agent.train(alpha = 0.02,
+        agent.train(alpha=0.02,
                     epsilon=0.04,
                     lambd=0.96)
         agent.createGraphs()
