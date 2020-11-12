@@ -49,17 +49,15 @@ class FrozenAgent:
 
         '''
         self.maxEpochs = maxEpochs
+        self.QtablesSample = {}
         self.rewards = []
         self.stepsPerEpoch = []
-        self.QtablesSample = {}
-
+        
         sampleSteps = [200, 500]
         currentState = self.env.reset()
         overallSteps = 0
-        self.rewards = []
-        self.stepsPerEpoch = []
 
-        currentState = self.env.reset()
+
         for _ in range(maxEpochs):
             step = 0
             overallReward = 0
