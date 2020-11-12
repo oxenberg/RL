@@ -6,6 +6,10 @@ import pandas as pd
 from random import shuffle
 from tqdm import tqdm
 
+
+SEARCH_HP = True
+
+
 class FrozenAgent:
     def __init__(self):
         '''
@@ -19,8 +23,7 @@ class FrozenAgent:
         '''
         self.env = gym.make('FrozenLake-v0')
         self.num_actions = self.env.action_space.n
-        self.Qtable = np.zeros(
-            (self.env.observation_space.n, self.num_actions))
+        
         # ToDo: check is_slippery variable in make
         # ToDo: verify on which board size we play
         # ToDo: verify hyperparameter values
@@ -35,7 +38,7 @@ class FrozenAgent:
                                  for i in range(self.num_actions)]
         return np.random.choice(self.actions, p=sampling_distribution)
 
-    def train(self, maxEpochs=10, alpha=0.01, epsilon=0.1, lambd=0.97, maxSteps=100):
+    def train(self, maxEpochs=5000, alpha=0.01, epsilon=0.1, lambd=0.97, maxSteps=100):
         '''
         train the agent on the env with the Q-learning algo
         
@@ -55,7 +58,8 @@ class FrozenAgent:
         self.QtablesSample = {}
         self.rewards = []
         self.stepsPerEpoch = []
-
+        self.Qtable = np.zeros(
+                    (self.env.observation_space.n, self.num_actions))
         sampleSteps = [200, 500]
         currentState = self.env.reset()
         overallSteps = 0
@@ -158,29 +162,41 @@ class FrozenAgent:
 '''
 
 
-def gridSearch(parmas, agent, nSearch, maxEpochs=5000):
+def gridSearch(parmas, agent, nSearch =10, maxEpochs=5000,maxN = False, aveOver = 10):
     paramsList = list(ParameterGrid(parmas))
     shuffle(paramsList)
 
-    if nSearch > len(paramsList):
+    if nSearch > len(paramsList) or maxN:
         nSearch = len(paramsList)
 
     gridSearchResults = []
     for paramsDict in tqdm(paramsList[:nSearch]):
-        agent.train(maxEpochs=maxEpochs,
-                    alpha=paramsDict["alpha"],
-                    epsilon=paramsDict["epsilon"],
-                    lambd=paramsDict["lambd"])
-        paramsDict['total_reward'] = sum(agent.rewards)
+        aveReward = 0  
+        for _ in range(aveOver):
+            agent.train(maxEpochs=maxEpochs,
+                        alpha=paramsDict["alpha"],
+                        epsilon=paramsDict["epsilon"],
+                        lambd=paramsDict["lambd"])
+            aveReward+= sum(agent.rewards)
+        paramsDict['total_reward'] = aveReward/aveOver
         gridSearchResults.append(paramsDict)
 
     hyperparameterTable = pd.DataFrame(gridSearchResults)
+    hyperparameterTable.sort_values("total_reward",inplace = True)
+    hyperparameterTable.to_csv("HP.csv")
     print(hyperparameterTable)
 
 
 if __name__ == '__main__':
     agent = FrozenAgent()
-    params = {"alpha": list(np.arange(0.01, 0.05, 0.01)),
-              "epsilon": list(np.arange(0.01, 0.08, 0.01)),
-              "lambd": list(np.arange(0.9, 0.98, 0.01))}
-    gridSearch(params, agent, 10)
+    if SEARCH_HP:
+        params = {"alpha": list(np.arange(0.01, 0.05, 0.01)),
+                  "epsilon": list(np.arange(0.01, 0.15, 0.01)),
+                  "lambd": list(np.arange(0.9, 0.98, 0.01))}
+        gridSearch(params, agent, maxN = True)
+    else:
+        agent.train(alpha = 0.02,
+                    epsilon=0.04,
+                    lambd=0.96)
+        agent.createGraphs()
+        print(sum(agent.rewards))
