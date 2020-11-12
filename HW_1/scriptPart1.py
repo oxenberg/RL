@@ -1,9 +1,10 @@
 import gym
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.model_selection  import ParameterGrid
+from sklearn.model_selection import ParameterGrid
 import pandas as pd
 from random import shuffle
+from tqdm import tqdm
 
 class FrozenAgent:
     def __init__(self):
@@ -66,7 +67,7 @@ class FrozenAgent:
                 randomAction = self._sampleActionFromQtable(currentState, epsilon)
                 newState, reward, done, info = self.env.step(randomAction)
                 step += 1
-                epsilon *= 1 / step**(0.01)
+                epsilon *= 1 / step ** (0.01)
                 overallReward += reward
 
                 if done or step == maxSteps:
@@ -84,7 +85,7 @@ class FrozenAgent:
 
                 target = reward + lambd * maxQ
                 self.Qtable[currentState, randomAction] += (alpha *
-                                                           (target - self.Qtable[currentState, randomAction]))
+                                                            (target - self.Qtable[currentState, randomAction]))
 
                 currentState = newState
 
@@ -148,7 +149,6 @@ class FrozenAgent:
         plt.show()
 
 
-
 '''
 {
  "paramsName" : range(min,max,jump)
@@ -157,24 +157,30 @@ class FrozenAgent:
 
 '''
 
-def gridSearch(parmas,agent,nSearch,maxEpochs = 5000):
+
+def gridSearch(parmas, agent, nSearch, maxEpochs=5000):
     paramsList = list(ParameterGrid(parmas))
     shuffle(paramsList)
-    hyperparameterTable = pd.DataFrame(columns = list(paramsList[0].keys()))
 
-    if nSearch> len(paramsList):
+    if nSearch > len(paramsList):
         nSearch = len(paramsList)
 
-    for paramsDict in paramsList[:nSearch]:
-        agent.train(maxEpochs = 5000,alpha=paramsDict["alpha"],
-                    epsilon = paramsDict["epsilon"], lambd=paramsDict["lambd"])
-        hyperparameterTable = hyperparameterTable.append(paramsDict,ignore_index=True)
+    gridSearchResults = []
+    for paramsDict in tqdm(paramsList[:nSearch]):
+        agent.train(maxEpochs=maxEpochs,
+                    alpha=paramsDict["alpha"],
+                    epsilon=paramsDict["epsilon"],
+                    lambd=paramsDict["lambd"])
+        paramsDict['total_reward'] = sum(agent.rewards)
+        gridSearchResults.append(paramsDict)
 
+    hyperparameterTable = pd.DataFrame(gridSearchResults)
     print(hyperparameterTable)
+
 
 if __name__ == '__main__':
     agent = FrozenAgent()
-    params = {"alpha":list(np.arange(0.01,0.05,0.01)),
-              "epsilon":list(np.arange(0.01,0.08,0.01)),
-              "lambd":list(np.arange(0.9,0.98,0.01))}
-    gridSearch(params,agent,10)
+    params = {"alpha": list(np.arange(0.01, 0.05, 0.01)),
+              "epsilon": list(np.arange(0.01, 0.08, 0.01)),
+              "lambd": list(np.arange(0.9, 0.98, 0.01))}
+    gridSearch(params, agent, 10)
