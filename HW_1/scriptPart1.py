@@ -25,14 +25,14 @@ class FrozenAgent:
         self.actions = [i for i in range(self.env.action_space.n)]
         self.states = [i for i in range(self.env.observation_space.n)]
 
-
     def _sampleActionFromQtable(self, state: int, epsilon):
-        best_action = np.argmax(self.Qtable[state, :])
+        max_reward = np.max(self.Qtable[state, :])
+        best_action = np.random.choice([i for i, q_val in enumerate(self.Qtable[state, :]) if q_val == max_reward])
         sampling_distribution = [1 - epsilon if i == best_action else epsilon / (self.num_actions - 1)
                                  for i in range(self.num_actions)]
         return np.random.choice(self.actions, p=sampling_distribution)
 
-    def train(self, maxEpochs=10, alpha=0.01,epsilon = 0.98, lambd=0.01, maxSteps=100):
+    def train(self, maxEpochs=10, alpha=0.01, epsilon=0.1, lambd=0.97, maxSteps=100):
         '''
         train the agent on the env with the Q-learning algo
         
@@ -52,30 +52,29 @@ class FrozenAgent:
         self.QtablesSample = {}
         self.rewards = []
         self.stepsPerEpoch = []
-        
+
         sampleSteps = [200, 500]
         currentState = self.env.reset()
         overallSteps = 0
-
 
         for _ in range(maxEpochs):
             step = 0
             overallReward = 0
             while (True):
-                randomAction = self._sampleActionFromQtable(
-                    currentState, epsilon)
+                randomAction = self._sampleActionFromQtable(currentState, epsilon)
                 newState, reward, done, info = self.env.step(randomAction)
+                step += 1
+                epsilon *= 1 / step**(0.01)
                 overallReward += reward
 
-                
                 if done or step == maxSteps:
                     self.stepsPerEpoch.append(step)
                     self.rewards.append(overallReward)
 
-                    self.Qtable[currentState, randomAction] = alpha * \
-                        (reward - self.Qtable[currentState, randomAction])
+                    self.Qtable[currentState, randomAction] += (alpha *
+                                                                (reward - self.Qtable[currentState, randomAction]))
                     currentState = self.env.reset()
-                    overallSteps += step
+                    overallSteps += step + 1
 
                     break
 
@@ -83,10 +82,9 @@ class FrozenAgent:
 
                 target = reward + lambd * maxQ
                 self.Qtable[currentState, randomAction] += alpha * \
-                    (target - self.Qtable[currentState, randomAction])
+                                                           (target - self.Qtable[currentState, randomAction])
 
                 currentState = newState
-                step += 1
                 # self.env.render()
 
             if overallSteps in sampleSteps:
@@ -106,10 +104,10 @@ class FrozenAgent:
 
         '''
         plt.figure(1)
-        plt.plot(np.arange(self.maxEpochs), self.rewards)
-        plt.xlabel("episode")
-        plt.ylabel("reward")
-        plt.title("reward per episode")
+        plt.plot(np.arange(self.maxEpochs), np.cumsum(self.rewards))
+        plt.xlabel("Episode number")
+        plt.ylabel("Cumulative reward")
+        plt.title("Overall Rewards per Episode")
 
         plt.figure(2)
         try:
@@ -117,9 +115,9 @@ class FrozenAgent:
                 np.array(self.stepsPerEpoch).reshape(-1, averageOver), axis=1)
             EpisodesSteps = np.arange(0, self.maxEpochs, 100)
             plt.plot(EpisodesSteps, averageWindow)
-            plt.xlabel("episode")
-            plt.ylabel("[steps]")
-            plt.title(f"average steps over {averageOver} episode")
+            plt.xlabel("Episode number")
+            plt.ylabel("Steps in the episode")
+            plt.title(f"Average steps over {averageOver} episodes")
 
         except:
             print("cant create graph 2 due of wrong divide number for the window")
@@ -129,8 +127,8 @@ class FrozenAgent:
         finaleQtable = self.QtablesSample[overallSteps]
         print(finaleQtable)
         im = ax.imshow(finaleQtable)
-        states = list(map(str,np.arange(finaleQtable.shape[0])))
-        actions = list(map(str,np.arange(finaleQtable.shape[1])))
+        states = list(map(str, np.arange(finaleQtable.shape[0])))
+        actions = list(map(str, np.arange(finaleQtable.shape[1])))
 
         # We want to show all ticks...
         ax.set_xticks(np.arange(len(actions)))
@@ -141,7 +139,7 @@ class FrozenAgent:
         # Loop over data dimensions and create text annotations.
         for i in range(len(states)):
             for j in range(len(actions)):
-                text = ax.text(j, i, round(np.log(finaleQtable[i, j]),2),
+                text = ax.text(j, i, round(np.log(finaleQtable[i, j]), 2),
                                ha="center", va="center", color="w")
 
         ax.set_title("final Q table")
@@ -160,5 +158,5 @@ class FrozenAgent:
 
 if __name__ == '__main__':
     agent = FrozenAgent()
-    agent.train(maxEpochs = 5000)
+    agent.train(maxEpochs=5000)
     agent.createGraphs()
