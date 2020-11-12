@@ -1,58 +1,66 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Nov 11 20:40:20 2020
-
-@author: oxenb
-"""
 import gym
 import numpy as np
 import matplotlib.pyplot as plt
 
-class FrozenAgent():
+
+class FrozenAgent:
     def __init__(self):
         '''
         initiate the env of FrozenLake and the Qtable with zeros
-        
-        parans:
- 
+
+        params:
+
 
         -------
 
         '''
         self.env = gym.make('FrozenLake-v0')
-        self.Qtable = np.zeros((self.env.observation_space.n,self.env.action_space.n))
 
-        
-    def train(self,maxEpochs = 10,alpha = 0.01,lambd = 0.97):
+        self.num_actions = self.env.action_space.n
+        self.Qtable = np.zeros((self.env.observation_space.n, self.num_actions))
+        # ToDo: check is_slippery variable in make
+        # ToDo: verify on which board size we play
+
+        self.actions = [i for i in range(self.env.action_space.n)]
+        self.states = [i for i in range(self.env.observation_space.n)]
+
+    def _sampleActionFromQtable(self, state: int, epsilon):
+        best_action = np.argmax(self.Qtable[state, :])
+        sampling_distribution = [1 - epsilon if i == best_action else epsilon / (self.num_actions - 1)
+                                 for i in range(self.num_actions)]
+        return np.random.choice(self.actions, p=sampling_distribution)
+
+    def train(self, maxEpochs=10, alpha=0.01, lambd=0.97, epsilon=0.1):
         '''
         params:
-            
+
         maxEpochs (float) -
-        alpha (float) - 
+        alpha (float) -
         lambd (float) -
-            
+        epsilon(float) - for epsilon greedy sampling algorithm
+
         Returns
         -------
         None.
 
         '''
+        # ToDo: verify hyperparameter values
         self.maxEpochs = 10
-        self.rewards = [] 
+        self.rewards = []
         self.stepsPerEpoch = []
-        
-        currentState = self.env.reset()
 
+        currentState = self.env.reset()
         for _ in range(maxEpochs):
             step = 0
-            while(True):
-                randomAction = self.env.action_space.sample()
+            while (True):
+                randomAction = self._sampleActionFromQtable(currentState, epsilon)
                 newState, reward, done, info = self.env.step(randomAction)
                 maxQ = max(self.Qtable[newState])
                 target = reward + lambd * maxQ
-                self.Qtable[currentState,randomAction] += alpha*(target - self.Qtable[currentState,randomAction])
-                
+                self.Qtable[currentState, randomAction] += alpha * (target - self.Qtable[currentState, randomAction])
+
                 currentState = newState
-                step+=1
+                step += 1
                 self.env.render()
                 if done:
                     self.rewards.append(reward)
@@ -60,7 +68,6 @@ class FrozenAgent():
                     break
         self.env.close()
 
-        
     def createGraphs(self):
         '''
         1.Plot of the reward per episode.
@@ -72,34 +79,11 @@ class FrozenAgent():
 
         '''
         plt.figure(1)
-        plt.plot(np.arange(self.maxEpochs),self.rewards)
-        
-        
-        
+        plt.plot(np.arange(self.maxEpochs), self.rewards)
 
 
-# env = gym.make('FrozenLake-v0')
-# env.reset()
-# env_parms = 0
-# for _ in range(100):
-#     env.render()
-#     observation, reward, done, info = env.step(env.action_space.sample()) # take a random action
-# env.close()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+if __name__ == '__main__':
+    agent = FrozenAgent()
+    agent.train(5000)
+    print()
 
