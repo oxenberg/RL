@@ -1,7 +1,9 @@
 import gym
 import numpy as np
 import matplotlib.pyplot as plt
-
+from sklearn.model_selection  import ParameterGrid
+import pandas as pd
+from random import shuffle
 
 class FrozenAgent:
     def __init__(self):
@@ -74,18 +76,17 @@ class FrozenAgent:
                     self.Qtable[currentState, randomAction] += (alpha *
                                                                 (reward - self.Qtable[currentState, randomAction]))
                     currentState = self.env.reset()
-                    overallSteps += step + 1
+                    overallSteps += step
 
                     break
 
                 maxQ = max(self.Qtable[newState])
 
                 target = reward + lambd * maxQ
-                self.Qtable[currentState, randomAction] += alpha * \
-                                                           (target - self.Qtable[currentState, randomAction])
+                self.Qtable[currentState, randomAction] += (alpha *
+                                                           (target - self.Qtable[currentState, randomAction]))
 
                 currentState = newState
-                # self.env.render()
 
             if overallSteps in sampleSteps:
                 self.QtablesSample[overallSteps] = self.Qtable
@@ -133,7 +134,7 @@ class FrozenAgent:
         # We want to show all ticks...
         ax.set_xticks(np.arange(len(actions)))
         ax.set_yticks(np.arange(len(states)))
-        # ... and label them with the respective list entries
+        # label them with the respective list entries
         ax.set_xticklabels(actions)
         ax.set_yticklabels(states)
         # Loop over data dimensions and create text annotations.
@@ -147,16 +148,33 @@ class FrozenAgent:
         plt.show()
 
 
-# env = gym.make('FrozenLake-v0')
-# env.reset()
-# env_parms = 0
-# for _ in range(100):
-#     env.render()
-#     observation, reward, done, info = env.step(env.action_space.sample()) # take a random action
-# env.close()
 
+'''
+{
+ "paramsName" : range(min,max,jump)
+ 
+ }
+
+'''
+
+def gridSearch(parmas,agent,nSearch,maxEpochs = 5000):
+    paramsList = list(ParameterGrid(parmas))
+    shuffle(paramsList)
+    hyperparameterTable = pd.DataFrame(columns = list(paramsList[0].keys()))
+
+    if nSearch> len(paramsList):
+        nSearch = len(paramsList)
+
+    for paramsDict in paramsList[:nSearch]:
+        agent.train(maxEpochs = 5000,alpha=paramsDict["alpha"],
+                    epsilon = paramsDict["epsilon"], lambd=paramsDict["lambd"])
+        hyperparameterTable = hyperparameterTable.append(paramsDict,ignore_index=True)
+
+    print(hyperparameterTable)
 
 if __name__ == '__main__':
     agent = FrozenAgent()
-    agent.train(maxEpochs=5000)
-    agent.createGraphs()
+    params = {"alpha":list(np.arange(0.01,0.05,0.01)),
+              "epsilon":list(np.arange(0.01,0.08,0.01)),
+              "lambd":list(np.arange(0.9,0.98,0.01))}
+    gridSearch(params,agent,10)
