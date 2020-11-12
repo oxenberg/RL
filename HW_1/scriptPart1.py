@@ -24,23 +24,20 @@ class FrozenAgent:
         self.actions = [i for i in range(self.env.action_space.n)]
         self.states = [i for i in range(self.env.observation_space.n)]
 
-    def _sampleActionFromQtable(self, state: int, epsilon=0.1):
+    def _sampleActionFromQtable(self, state: int, epsilon):
         best_action = np.argmax(self.Qtable[state, :])
         sampling_distribution = [1 - epsilon if i == best_action else epsilon / (self.num_actions - 1)
                                  for i in range(self.num_actions)]
         return np.random.choice(self.actions, p=sampling_distribution)
 
-    def train(self):
-        self.env = gym.make('FrozenLake-v0')
-        self.Qtable = np.zeros((self.env.observation_space.n, self.env.action_space.n))
-
-    def train(self, maxEpochs=10, alpha=0.01, lambd=0.97):
+    def train(self, maxEpochs=10, alpha=0.01, lambd=0.97, epsilon=0.1):
         '''
         params:
 
         maxEpochs (float) -
         alpha (float) -
         lambd (float) -
+        epsilon(float) - for epsilon greedy sampling algorithm
 
         Returns
         -------
@@ -53,11 +50,10 @@ class FrozenAgent:
         self.stepsPerEpoch = []
 
         currentState = self.env.reset()
-
         for _ in range(maxEpochs):
             step = 0
             while (True):
-                randomAction = self.env.action_space.sample()
+                randomAction = self._sampleActionFromQtable(currentState, epsilon)
                 newState, reward, done, info = self.env.step(randomAction)
                 maxQ = max(self.Qtable[newState])
                 target = reward + lambd * maxQ
@@ -85,10 +81,9 @@ class FrozenAgent:
         plt.figure(1)
         plt.plot(np.arange(self.maxEpochs), self.rewards)
 
-# env = gym.make('FrozenLake-v0')
-# env.reset()
-# env_parms = 0
-# for _ in range(100):
-#     env.render()
-#     observation, reward, done, info = env.step(env.action_space.sample()) # take a random action
-# env.close()
+
+if __name__ == '__main__':
+    agent = FrozenAgent()
+    agent.train(5000)
+    print()
+
