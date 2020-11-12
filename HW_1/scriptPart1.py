@@ -35,7 +35,7 @@ class FrozenAgent:
                                  for i in range(self.num_actions)]
         return np.random.choice(self.actions, p=sampling_distribution)
 
-    def train(self, maxEpochs=10, alpha=0.01, epsilon=0.1, lambd=0.97, maxSteps=100):
+    def train(self, maxEpochs=10, alpha=0.01, epsilon=0.1, gamma=0.97, maxSteps=100):
         '''
         train the agent on the env with the Q-learning algo
         
@@ -43,7 +43,7 @@ class FrozenAgent:
 
         maxEpochs (float) -
         alpha (float) -
-        lambd (float) -
+        gamma (float) -
         epsilon(float) - for epsilon greedy sampling algorithm
 
         Returns
@@ -83,7 +83,7 @@ class FrozenAgent:
 
                 maxQ = max(self.Qtable[newState])
 
-                target = reward + lambd * maxQ
+                target = reward + gamma * maxQ
                 self.Qtable[currentState, randomAction] += (alpha *
                                                             (target - self.Qtable[currentState, randomAction]))
 
@@ -170,7 +170,7 @@ def gridSearch(parmas, agent, nSearch, maxEpochs=5000):
         agent.train(maxEpochs=maxEpochs,
                     alpha=paramsDict["alpha"],
                     epsilon=paramsDict["epsilon"],
-                    lambd=paramsDict["lambd"])
+                    gamma=paramsDict["gamma"])
         paramsDict['total_reward'] = sum(agent.rewards)
         gridSearchResults.append(paramsDict)
 
@@ -182,5 +182,5 @@ if __name__ == '__main__':
     agent = FrozenAgent()
     params = {"alpha": list(np.arange(0.01, 0.05, 0.01)),
               "epsilon": list(np.arange(0.01, 0.08, 0.01)),
-              "lambd": list(np.arange(0.9, 0.98, 0.01))}
+              "gamma": list(np.arange(0.9, 0.98, 0.01))}
     gridSearch(params, agent, 10)
