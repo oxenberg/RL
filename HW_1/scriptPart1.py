@@ -15,7 +15,15 @@ class FrozenAgent:
 
         '''
         self.env = gym.make('FrozenLake-v0')
+        self.num_actions = self.env.action_space.n
+        self.Qtable = np.zeros(
+            (self.env.observation_space.n, self.num_actions))
+        # ToDo: check is_slippery variable in make
+        # ToDo: verify on which board size we play
+        # ToDo: verify hyperparameter values
 
+        self.actions = [i for i in range(self.env.action_space.n)]
+        self.states = [i for i in range(self.env.observation_space.n)]
 
 
     def _sampleActionFromQtable(self, state: int, epsilon):
@@ -26,6 +34,8 @@ class FrozenAgent:
 
     def train(self, maxEpochs=10, alpha=0.01,epsilon = 0.98, lambd=0.01, maxSteps=100):
         '''
+        train the agent on the env with the Q-learning algo
+        
         params:
 
         maxEpochs (float) -
@@ -38,16 +48,6 @@ class FrozenAgent:
         None.
 
         '''
-        self.num_actions = self.env.action_space.n
-        self.Qtable = np.zeros(
-            (self.env.observation_space.n, self.num_actions))
-        # ToDo: check is_slippery variable in make
-        # ToDo: verify on which board size we play
-        # ToDo: verify hyperparameter values
-
-        self.actions = [i for i in range(self.env.action_space.n)]
-        self.states = [i for i in range(self.env.observation_space.n)]
-
         self.maxEpochs = maxEpochs
         self.rewards = []
         self.stepsPerEpoch = []
