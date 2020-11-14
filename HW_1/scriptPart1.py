@@ -38,7 +38,7 @@ class FrozenAgent:
                                  for i in range(self.num_actions)]
         return np.random.choice(self.actions, p=sampling_distribution)
 
-    def train(self, maxEpochs=5000, alpha=0.01, epsilon=0.1, lambd=0.97, maxSteps=100):
+    def train(self, maxEpochs=5000, alpha=0.01, epsilon=0.1, gamma=0.97, maxSteps=100):
         '''
         train the agent on the env with the Q-learning algo
 
@@ -177,7 +177,7 @@ def gridSearch(parmas, agent, nSearch=10, maxEpochs=5000, maxN=False, aveOver=10
             agent.train(maxEpochs=maxEpochs,
                         alpha=paramsDict["alpha"],
                         epsilon=paramsDict["epsilon"],
-                        lambd=paramsDict["lambd"])
+                        gamma=paramsDict["gamma"])
             aveReward += sum(agent.rewards)
         paramsDict['total_reward'] = aveReward/aveOver
         gridSearchResults.append(paramsDict)
@@ -193,11 +193,11 @@ if __name__ == '__main__':
     if SEARCH_HP:
         params = {"alpha": list(np.arange(0.01, 0.05, 0.01)),
                   "epsilon": list(np.arange(0.01, 0.15, 0.01)),
-                  "lambd": list(np.arange(0.9, 0.98, 0.01))}
+                  "gamma": list(np.arange(0.9, 0.98, 0.01))}
         gridSearch(params, agent, maxN=True)
     else:
         agent.train(alpha=0.02,
                     epsilon=0.04,
-                    lambd=0.96)
+                    gamma=0.96)
         agent.createGraphs()
         print(sum(agent.rewards))
