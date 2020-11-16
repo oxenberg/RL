@@ -17,7 +17,7 @@ class CartPoleAgent:
         self.env = gym.make('CartPole-v1')
         initial_state = self.env.reset()
         self._input_shape = initial_state.shape
-        self.num_neurons = 32
+        self.num_neurons = 6
         self.num_actions = self.env.action_space.n
         self.actions = [i for i in range(self.env.action_space.n)]
 
@@ -63,47 +63,49 @@ class CartPoleAgent:
         reward = np.array([transition.reward for transition in minibatch])
         return reward + (1 - done) * gamma * np.max(self.target_network.predict(next_state), axis=1)
 
+    def _update_target_network(self):
+        self.target_network = clone_model(self.q_value_network)
+        self.target_network.set_weights(self.q_value_network.get_weights())
+
     def train_agent(self,
                     num_hidden_layers: int,
                     minibatch_size=150,
                     gamma=0.99,
                     C=10,
-                    epsilon=0.02,
+                    epsilon=0.1,
                     learning_rate=0.01):
         not_converged = True
         self.q_value_network = self._initialize_network(num_hidden_layers, learning_rate)
-        self.target_network = clone_model(self.q_value_network)
-        self.histories = []
+        self._update_target_network()
         self.episodes_total_rewards = []
         episodes = 0
+        steps = 0
         while (not_converged or episodes < 100):
             episodes += 1
-            steps = 0
             done = False
             current_state = np.array([self.env.reset()])
-            episode_rewards = []
+            episode_rewards = 0
             while not done:
                 action = self.sample_action(current_state, epsilon)
-                epsilon /= (episodes ** 0.01)
+                epsilon /= (episodes ** 0.001)
                 next_state, reward, done, _ = self.env.step(action)
                 next_state = np.array([next_state])
                 steps += 1
-                episode_rewards.append(reward)
+                episode_rewards += reward
                 self.experience_replay.append(Transition(current_state, action, reward, next_state, done))
                 current_state = next_state
 
                 sampled_minibatch = self.sample_batch(minibatch_size)
                 y_values = self._calculate_target_values(sampled_minibatch, gamma)
                 all_transitions = np.array([transition.current_state[0] for transition in sampled_minibatch])
-                history = self.q_value_network.fit(all_transitions,
-                                                   y_values,
-                                                   epochs=1,
-                                                   verbose=0)
-                self.histories.append(history)
+                self.q_value_network.fit(all_transitions,
+                                         y_values,
+                                         epochs=1,
+                                         verbose=0)
                 if steps % C == 0:
-                    self.target_network = clone_model(self.q_value_network)
+                    self._update_target_network()
 
-            self.episodes_total_rewards.append(sum(episode_rewards))
+            self.episodes_total_rewards.append(episode_rewards)
             if episodes % 10 == 0:
                 print(episodes, np.mean(self.episodes_total_rewards[-100:]))
             not_converged = not self._has_converged()
