@@ -1,11 +1,11 @@
-import gym
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.model_selection import ParameterGrid
-import pandas as pd
 from random import shuffle
-from tqdm import tqdm
 
+import gym
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import ParameterGrid
+from tqdm import tqdm
 
 SEARCH_HP = True
 
@@ -22,11 +22,6 @@ class FrozenAgent:
         '''
         self.env = gym.make('FrozenLake-v0')
         self.num_actions = self.env.action_space.n
-
-        # ToDo: check is_slippery variable in make
-        # ToDo: verify on which board size we play
-        # ToDo: verify hyperparameter values
-
         self.actions = [i for i in range(self.env.action_space.n)]
         self.states = [i for i in range(self.env.observation_space.n)]
 
@@ -179,7 +174,7 @@ def gridSearch(parmas, agent, nSearch=10, maxEpochs=5000, maxN=False, aveOver=10
                         epsilon=paramsDict["epsilon"],
                         gamma=paramsDict["gamma"])
             aveReward += sum(agent.rewards)
-        paramsDict['total_reward'] = aveReward/aveOver
+        paramsDict['total_reward'] = aveReward / aveOver
         gridSearchResults.append(paramsDict)
 
     hyperparameterTable = pd.DataFrame(gridSearchResults)
