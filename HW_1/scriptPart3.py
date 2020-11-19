@@ -9,8 +9,8 @@ class CartPoleAgentPER(CartPoleAgent):
 
     def __init__(self, memory_size):
         CartPoleAgent.__init__(self, memory_size)
-        self.prioritization_epsilon = 0.01
-        self.prioritization_alpha = 0.01
+        self.prioritization_epsilon = 0.1
+        self.prioritization_alpha = 0.1
         self.Transition = recordtype('Transition',
                                      ['current_state', 'action', 'reward', 'next_state', 'done', "proba", "index"])
 
@@ -47,6 +47,18 @@ class CartPoleAgentPER(CartPoleAgent):
 
 
 if __name__ == '__main__':
-    agent = CartPoleAgentPER(memory_size=10000)
-    agent.train_agent(num_hidden_layers=3, stopEpisode=200)
-    agent.test_agent(100)
+    agent = CartPoleAgentPER(memory_size=2000)
+    params = {"num_hidden_layers": [3,5],
+              "minibatch_size": [50, 70, 100],
+              "gamma": [0.95, 0.9, 0.99],
+              "C": [10, 50, 100],
+              "epsilon_decay_factor":[0.99, 0.995],
+              "epsilon": [0.8, 0.82, 0.75],
+              "learning_rate": [0.0001, 0.001, 0.005]}
+    gridSearch(params, agent, maxN=True)
+    # agent.train_agent(num_hidden_layers=3, stopEpisode=5000)
+    # agent.test_agent(100)
+
+    # agent = CartPoleAgentPER(memory_size=10000)
+    # agent.train_agent(num_hidden_layers=3)
+    # agent.test_agent(100)

@@ -15,9 +15,7 @@ from tensorflow.python.keras.layers import Dense
 from tensorflow.python.keras.models import Sequential
 from tqdm import tqdm
 
-current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-train_log_dir = 'logs/gradient_tape/' + current_time + '/train'
-train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+
 
 MIN_EPSILON = 0.001
 
@@ -27,7 +25,7 @@ class CartPoleAgent:
         self.env = gym.make('CartPole-v1')
         initial_state = self.env.reset()
         self._input_shape = initial_state.shape
-        self.num_neurons = 36
+        self.num_neurons = 24
         self.num_actions = self.env.action_space.n
         self.actions = [i for i in range(self.env.action_space.n)]
         self.convergedTH = 475
@@ -38,6 +36,8 @@ class CartPoleAgent:
         self.loss_fn = keras.losses.MSE
 
         self.experience_replay = deque(maxlen=memory_size)
+        
+        
 
     def _initialize_network(self, num_hidden_layers: int, learning_rate: float):
         model = Sequential()
@@ -103,6 +103,11 @@ class CartPoleAgent:
 
     def add_experience(self, current_state, action, reward, next_state, done):
         self.experience_replay.append(self.Transition(current_state, action, reward, next_state, done))
+        
+    def init_log_files(self):
+        self.current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        self.train_log_dir = 'logs/gradient_tape/' + self.current_time + '/train'
+        self.train_summary_writer = tf.summary.create_file_writer(self.train_log_dir)
 
     def train_agent(self,
                     num_hidden_layers: int,
@@ -114,6 +119,8 @@ class CartPoleAgent:
                     stopEpisode=None,
                     epsilon_decay_factor=0.99):
         not_converged = True
+        self.init_log_files()
+        
         self.optimizer = keras.optimizers.SGD(learning_rate)
 
         self.q_value_network = self._initialize_network(num_hidden_layers, learning_rate)
@@ -144,14 +151,14 @@ class CartPoleAgent:
 
                 self.train_step(self.q_value_network, self.optimizer, all_transitions, y_values)
 
-                with train_summary_writer.as_default():
+                with self.train_summary_writer.as_default():
                     tf.summary.scalar('loss', self.train_loss.result(), step=steps)
 
                 if steps % C == 0:
                     self._update_target_network()
 
             self.episodes_total_rewards.append(episode_rewards)
-            with train_summary_writer.as_default():
+            with self.train_summary_writer.as_default():
                 tf.summary.scalar('rewards', data=episode_rewards, step=episodes)
                 tf.summary.scalar('epsilon', data=epsilon, step=episodes)
 
@@ -197,14 +204,14 @@ def gridSearch(parmas, agent, nSearch=10, maxEpochs=5000, maxN=False, aveOver=10
 
 
 if __name__ == '__main__':
-    agent = CartPoleAgent(memory_size=10000)
+    agent = CartPoleAgent(memory_size=2000)
     params = {"num_hidden_layers": [3,5],
-              "minibatch_size": [20, 100, 300],
-              "gamma": [0.95, 0.9, 0.995],
+              "minibatch_size": [50, 70, 100],
+              "gamma": [0.95, 0.9, 0.99],
               "C": [10, 50, 100],
               "epsilon_decay_factor":[0.99, 0.995],
-              "epsilon": [0.8, 0.2],
-              "learning_rate": [0.0001, 0.001, 0.00001]}
+              "epsilon": [0.8, 0.82, 0.75],
+              "learning_rate": [0.0001, 0.001, 0.005]}
     gridSearch(params, agent, maxN=True)
-    agent.train_agent(num_hidden_layers=5, stopEpisode=5000)
+    agent.train_agent(num_hidden_layers=3, stopEpisode=5000)
     agent.test_agent(100)
