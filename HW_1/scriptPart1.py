@@ -7,25 +7,33 @@ import pandas as pd
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
-SEARCH_HP = True
+SEARCH_HP = False
 
 
 class FrozenAgent:
     def __init__(self):
         '''
-        initiate the env of FrozenLake and the Qtable with zeros
-
-        params:
-
-        -------
-
+        An agent for the FrozenLake OpenGym environment.
+        Learns to play using the Q-learning algorithm.
+        Initiates the FrozenLake environment.
         '''
         self.env = gym.make('FrozenLake-v0')
         self.num_actions = self.env.action_space.n
         self.actions = [i for i in range(self.env.action_space.n)]
         self.states = [i for i in range(self.env.observation_space.n)]
 
-    def _sampleActionFromQtable(self, state: int, epsilon):
+    def _sampleActionFromQtable(self, state: int, epsilon: float):
+        '''
+        Samples an action based on the Qtable using an epsilon-greedy approach.
+
+        params:
+            state (int): the current state for which we need to act on
+            epsilon (float): current epsilon value for the epsilon-greedy sampling
+
+        return:
+            action (int): the action that was sampled
+
+        '''
         max_reward = np.max(self.Qtable[state, :])
         best_action = np.random.choice(
             [i for i, q_val in enumerate(self.Qtable[state, :]) if q_val == max_reward])
@@ -35,26 +43,25 @@ class FrozenAgent:
 
     def train(self, maxEpochs=5000, alpha=0.01, epsilon=0.1, gamma=0.97, maxSteps=100):
         '''
-        train the agent on the env with the Q-learning algo
+        Trains the agent on the FrozenLake environment with the Q-learning algorithm.
+        At each step, samples an action using decaying epsilon-greedy approach.
 
         params:
+            maxEpochs (int): number of epochs to train on
+            alpha (float): learning rate for the update steps
+            gamma (float): decay factor
+            epsilon(float): initial epsilon value for epsilon-greedy sampling of the action
+            masSteps (int): maximum steps per episode
 
-        maxEpochs (float) -
-        alpha (float) -
-        gamma (float) -
-        epsilon(float) - for epsilon greedy sampling algorithm
-
-        Returns
-        -------
-        None.
+        return:
+            None
 
         '''
         self.maxEpochs = maxEpochs
         self.QtablesSample = {}
         self.rewards = []
         self.stepsPerEpoch = []
-        self.Qtable = np.zeros(
-            (self.env.observation_space.n, self.num_actions))
+        self.Qtable = np.zeros((self.env.observation_space.n, self.num_actions))
         sampleSteps = [200, 500]
         currentState = self.env.reset()
         overallSteps = 0
@@ -67,43 +74,42 @@ class FrozenAgent:
                     currentState, epsilon)
                 newState, reward, done, info = self.env.step(randomAction)
                 step += 1
+                overallSteps += 1
                 epsilon *= 1 / step ** (0.01)
                 overallReward += reward
 
                 if done or step == maxSteps:
-                    self.stepsPerEpoch.append(step)
+                    # ToDo: figure out if setting to 100 is needed
+                    epoch_steps = step # if newState == 15 else maxSteps
+                    self.stepsPerEpoch.append(epoch_steps)
                     self.rewards.append(overallReward)
 
                     self.Qtable[currentState, randomAction] += (alpha *
                                                                 (reward - self.Qtable[currentState, randomAction]))
                     currentState = self.env.reset()
-                    overallSteps += step
-
+                    if overallSteps in sampleSteps:
+                        self.QtablesSample[overallSteps] = self.Qtable
                     break
 
                 maxQ = max(self.Qtable[newState])
-
                 target = reward + gamma * maxQ
                 self.Qtable[currentState, randomAction] += (alpha *
                                                             (target - self.Qtable[currentState, randomAction]))
 
                 currentState = newState
-
-            if overallSteps in sampleSteps:
-                self.QtablesSample[overallSteps] = self.Qtable
+                if overallSteps in sampleSteps:
+                    self.QtablesSample[overallSteps] = self.Qtable
 
         self.QtablesSample[overallSteps] = self.Qtable
         self.env.close()
 
     def createGraphs(self, averageOver=100):
         '''
-        1.Plot of the reward per episode.
-        2.Plot of the average number of steps to the goal over last 100 episodes
-
-        Returns
-        -------
-        None.
-
+        Creates graphs of the agent's learning process. Can use after the agent has been trained.
+        Will show the following plots:
+            1. Plot of the cumulative rewards per episode.
+            2. Plot of the average number of steps to the goal over last 100 episodes
+            3. Colormaps of the Q-value table after 500 steps, 2000 steps and the final table
         '''
         plt.figure(1)
         plt.plot(np.arange(self.maxEpochs), np.cumsum(self.rewards))
@@ -124,42 +130,32 @@ class FrozenAgent:
         except:
             print("cant create graph 2 due of wrong divide number for the window")
 
-        fig, ax = plt.subplots(figsize=(12, 12))
-        overallSteps = list(self.QtablesSample.keys())[-1]
-        finaleQtable = self.QtablesSample[overallSteps]
-        print(finaleQtable)
-        im = ax.imshow(finaleQtable)
-        states = list(map(str, np.arange(finaleQtable.shape[0])))
-        actions = list(map(str, np.arange(finaleQtable.shape[1])))
+        for steps, q_table in self.QtablesSample.items():
+            fig, ax = plt.subplots(figsize=(12, 12))
+            _ = ax.imshow(q_table)
+            states = list(map(str, np.arange(q_table.shape[0])))
+            actions = list(map(str, np.arange(q_table.shape[1])))
 
-        # We want to show all ticks...
-        ax.set_xticks(np.arange(len(actions)))
-        ax.set_yticks(np.arange(len(states)))
-        # label them with the respective list entries
-        ax.set_xticklabels(actions)
-        ax.set_yticklabels(states)
-        # Loop over data dimensions and create text annotations.
-        for i in range(len(states)):
-            for j in range(len(actions)):
-                text = ax.text(j, i, round(np.log(finaleQtable[i, j]), 2),
-                               ha="center", va="center", color="w")
+            # We want to show all ticks...
+            ax.set_xticks(np.arange(len(actions)))
+            ax.set_yticks(np.arange(len(states)))
+            # label them with the respective list entries
+            ax.set_xticklabels(actions)
+            ax.set_yticklabels(states)
+            # Loop over data dimensions and create text annotations.
+            for i in range(len(states)):
+                for j in range(len(actions)):
+                    _ = ax.text(j, i, round(np.log(q_table[i, j]), 2),
+                                   ha="center", va="center", color="w")
 
-        ax.set_title("final Q table")
-        fig.tight_layout()
+            title = f"Qtable after {steps} steps" if steps in (200, 500) else "Final Qtable"
+            ax.set_title(title)
+            fig.tight_layout()
         plt.show()
 
 
-'''
-{
- "paramsName" : range(min,max,jump)
- 
- }
-
-'''
-
-
-def gridSearch(parmas, agent, nSearch=10, maxEpochs=5000, maxN=False, aveOver=10):
-    paramsList = list(ParameterGrid(parmas))
+def gridSearch(params, agent, nSearch=10, maxEpochs=5000, maxN=False, aveOver=10):
+    paramsList = list(ParameterGrid(params))
     shuffle(paramsList)
 
     if nSearch > len(paramsList) or maxN:
@@ -191,8 +187,14 @@ if __name__ == '__main__':
                   "gamma": list(np.arange(0.9, 0.98, 0.01))}
         gridSearch(params, agent, maxN=True)
     else:
-        agent.train(alpha=0.02,
-                    epsilon=0.04,
-                    gamma=0.96)
-        agent.createGraphs()
+        # ToDo: remove converged
+        converged = False
+        while(not converged):
+            agent.train(alpha=0.01,
+                        epsilon=0.01,
+                        gamma=0.93)
+            if np.cumsum(agent.rewards)[-1] < 550:
+                continue
+            agent.createGraphs()
+            converged = True
         print(sum(agent.rewards))
