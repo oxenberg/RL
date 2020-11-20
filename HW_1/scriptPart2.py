@@ -10,12 +10,13 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from sklearn.model_selection import ParameterGrid
-from tensorflow.keras.optimizers import SGD
 from tensorflow.python.keras.layers import Dense
 from tensorflow.python.keras.models import Sequential
+from keras.optimizers import SGD
 from tqdm import tqdm
 
 SEARCH_HP = False
+
 
 class CartPoleAgent:
     def __init__(self, memory_size):
@@ -35,7 +36,8 @@ class CartPoleAgent:
         self.num_actions = self.env.action_space.n
         self.actions = [i for i in range(self.env.action_space.n)]
         self.convergedTH = 475
-        self.Transition = namedtuple('Transition', ['current_state', 'action', 'reward', 'next_state', 'done'])
+        self.Transition = namedtuple(
+            'Transition', ['current_state', 'action', 'reward', 'next_state', 'done'])
 
         self.train_loss = tf.keras.metrics.Mean('train_loss', dtype=tf.float32)
         self.loss_fn = keras.losses.MSE
@@ -60,10 +62,10 @@ class CartPoleAgent:
         model = Sequential()
         model.add(Dense(self.num_neurons, input_dim=4, name='layer_0'))
         for i in range(1, num_hidden_layers):
-            model.add(Dense(self.num_neurons, activation='relu', name=f'layer_{i}'))
+            model.add(Dense(self.num_neurons,
+                            activation='relu', name=f'layer_{i}'))
 
-        model.add(Dense(self.env.action_space.n, activation='softmax'))
-        model.compile(loss='mse', optimizer=SGD(lr=learning_rate))
+        model.add(Dense(self.env.action_space.n, activation='linear'))
         return model
 
     def NeuralNetwork(self, state):
@@ -127,12 +129,15 @@ class CartPoleAgent:
         return:
             ndarray: updated y values for the gradient descent
         '''
-        next_state = np.array([transition.next_state[0] for transition in minibatch])
+        next_state = np.array([transition.next_state[0]
+                               for transition in minibatch])
         done = np.array([transition.done for transition in minibatch])
         reward = np.array([transition.reward for transition in minibatch])
-        targets = reward + (1 - done) * gamma * np.max(self.target_network.predict(next_state), axis=1)
+        targets = reward + (1 - done) * gamma * \
+            np.max(self.target_network.predict(next_state), axis=1)
 
-        current_states = np.array([transition.current_state[0] for transition in minibatch])
+        current_states = np.array([transition.current_state[0]
+                                   for transition in minibatch])
         actions = np.array([transition.action for transition in minibatch])
         predictions = self.q_value_network.predict(current_states)
         for action, target, prediction in zip(actions, targets, predictions):
@@ -179,7 +184,8 @@ class CartPoleAgent:
             next_state (ndarray): state arrived to after taking the action
             done (bool): is the episode done
         '''
-        self.experience_replay.append(self.Transition(current_state, action, reward, next_state, done))
+        self.experience_replay.append(self.Transition(
+            current_state, action, reward, next_state, done))
 
     def init_log_files(self):
         '''
@@ -187,7 +193,8 @@ class CartPoleAgent:
         '''
         self.current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self.train_log_dir = 'logs/gradient_tape/' + self.current_time + '/train'
-        self.train_summary_writer = tf.summary.create_file_writer(self.train_log_dir)
+        self.train_summary_writer = tf.summary.create_file_writer(
+            self.train_log_dir)
 
     def train_agent(self,
                     num_hidden_layers: int,
@@ -197,7 +204,8 @@ class CartPoleAgent:
                     epsilon=0.8,
                     learning_rate=0.0005,
                     stopEpisode=None,
-                    epsilon_decay_factor=0.99):
+                    epsilon_decay_factor=0.99,
+                    clipnorm=False):
         '''
         Trains the agent to play on the cartpole environment using experience replay.
         Samples an action based on a decaying epsilon-greedy method.
@@ -215,10 +223,15 @@ class CartPoleAgent:
         not_converged = True
         self.init_log_files()
 
-        self.optimizer = keras.optimizers.SGD(learning_rate)
+        if clipnorm:
+            self.optimizer = SGD(learning_rate, clipnorm=1.0)
+        else:
+            self.optimizer = SGD(learning_rate)
 
-        self.q_value_network = self._initialize_network(num_hidden_layers, learning_rate)
-        self.target_network = self._initialize_network(num_hidden_layers, learning_rate)
+        self.q_value_network = self._initialize_network(
+            num_hidden_layers, learning_rate)
+        self.target_network = self._initialize_network(
+            num_hidden_layers, learning_rate)
         self.episodes_total_rewards = []
         episodes = 0
         steps = 0
@@ -234,24 +247,30 @@ class CartPoleAgent:
                 next_state = np.array([next_state])
                 steps += 1
                 episode_rewards += reward
-                self.add_experience(current_state, action, reward, next_state, done)
+                self.add_experience(current_state, action,
+                                    reward, next_state, done)
                 current_state = next_state
 
                 sampled_minibatch = self.sample_batch(minibatch_size)
-                y_values = self._calculate_target_values(sampled_minibatch, gamma)
-                all_transitions = np.array([transition.current_state[0] for transition in sampled_minibatch])
+                y_values = self._calculate_target_values(
+                    sampled_minibatch, gamma)
+                all_transitions = np.array(
+                    [transition.current_state[0] for transition in sampled_minibatch])
 
-                self.train_step(self.q_value_network, self.optimizer, all_transitions, y_values)
+                self.train_step(self.q_value_network,
+                                self.optimizer, all_transitions, y_values)
 
                 with self.train_summary_writer.as_default():
-                    tf.summary.scalar('loss', self.train_loss.result(), step=steps)
+                    tf.summary.scalar(
+                        'loss', self.train_loss.result(), step=steps)
 
                 if steps % C == 0:
                     self._update_target_network()
 
             self.episodes_total_rewards.append(episode_rewards)
             with self.train_summary_writer.as_default():
-                tf.summary.scalar('rewards', data=episode_rewards, step=episodes)
+                tf.summary.scalar(
+                    'rewards', data=episode_rewards, step=episodes)
                 tf.summary.scalar('epsilon', data=epsilon, step=episodes)
 
             not_converged = not self._has_converged()
@@ -265,13 +284,13 @@ class CartPoleAgent:
             render (bool): render the environment
         '''
         overallReward = 0
-        for i in range(episodes):
+        for _ in range(episodes):
             done = False
             aggrigateReward = 0
             current_state = np.array([self.env.reset()])
             while not done:
                 action = self.sample_action(current_state, 0)
-                next_state, reward, done, _ = self.env.step(action)
+                _, reward, done, _ = self.env.step(action)
                 aggrigateReward += reward
                 if render:
                     self.env.render()
@@ -290,7 +309,8 @@ def gridSearch(parmas, agent, nSearch=10, maxEpochs=5000, maxN=False, aveOver=10
     gridSearchResults = []
     for paramsDict in tqdm(paramsList[:nSearch]):
         agent.train_agent(stopEpisode=800, **paramsDict)
-        paramsDict['average_reward_last_100_episodes'] = np.mean(agent.episodes_total_rewards[-100:])
+        paramsDict['average_reward_last_100_episodes'] = np.mean(
+            agent.episodes_total_rewards[-100:])
         print(paramsDict)
         gridSearchResults.append(paramsDict)
 
