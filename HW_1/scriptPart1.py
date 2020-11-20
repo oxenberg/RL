@@ -75,12 +75,11 @@ class FrozenAgent:
                 newState, reward, done, info = self.env.step(randomAction)
                 step += 1
                 overallSteps += 1
-                epsilon *= 1 / step ** (0.01)
+                epsilon *= 1 / step ** 0.01
                 overallReward += reward
 
                 if done or step == maxSteps:
-                    # ToDo: figure out if setting to 100 is needed
-                    epoch_steps = step # if newState == 15 else maxSteps
+                    epoch_steps = step if newState == 15 else maxSteps
                     self.stepsPerEpoch.append(epoch_steps)
                     self.rewards.append(overallReward)
 
@@ -146,7 +145,7 @@ class FrozenAgent:
             for i in range(len(states)):
                 for j in range(len(actions)):
                     _ = ax.text(j, i, round(np.log(q_table[i, j]), 2),
-                                   ha="center", va="center", color="w")
+                                ha="center", va="center", color="w")
 
             title = f"Qtable after {steps} steps" if steps in (200, 500) else "Final Qtable"
             ax.set_title(title)
@@ -183,18 +182,12 @@ if __name__ == '__main__':
     agent = FrozenAgent()
     if SEARCH_HP:
         params = {"alpha": list(np.arange(0.01, 0.05, 0.01)),
-                  "epsilon": list(np.arange(0.01, 0.15, 0.01)),
+                  "epsilon": [0.8, 0.5, 0.2],
                   "gamma": list(np.arange(0.9, 0.98, 0.01))}
         gridSearch(params, agent, maxN=True)
     else:
-        # ToDo: remove converged
-        converged = False
-        while(not converged):
-            agent.train(alpha=0.01,
-                        epsilon=0.01,
-                        gamma=0.93)
-            if np.cumsum(agent.rewards)[-1] < 550:
-                continue
-            agent.createGraphs()
-            converged = True
+        agent.train(alpha=0.01,
+                    epsilon=0.8,
+                    gamma=0.9)
+        agent.createGraphs()
         print(sum(agent.rewards))
