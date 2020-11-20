@@ -1,8 +1,11 @@
 import numpy as np
 from recordtype import recordtype
+from tensorflow.python.keras.layers import Dense
+from tensorflow.python.keras.models import Sequential
+from tensorflow.keras.optimizers import Adam
 
 # from scriptPart2 import CartPoleAgent
-from HW_1.scriptPart2 import CartPoleAgent
+from scriptPart2 import CartPoleAgent,gridSearch
 
 
 class CartPoleAgentPER(CartPoleAgent):
@@ -13,7 +16,32 @@ class CartPoleAgentPER(CartPoleAgent):
         self.prioritization_alpha = 0.1
         self.Transition = recordtype('Transition',
                                      ['current_state', 'action', 'reward', 'next_state', 'done', "proba", "index"])
+        
+        
+        
+    def _initialize_network(self, num_hidden_layers: int, learning_rate: float):
+        '''
+        Creates a neural network for the q-value function and the target function.
+        Each layer will have 24 neurons. The hidden layers use a RELU activation function while the
+        output layer uses a Linear activation function.
+        The Adam optimization algorithm is used for the back propagation.
 
+        params:
+            num_hidden_layers (int): number of hidden layers in the model
+            learning_rate (float): learning rate for the Adam optimizer
+
+        return:
+            model: a compiled model
+
+        '''
+        model = Sequential()
+        model.add(Dense(self.num_neurons, input_dim=4, name='layer_0'))
+        for i in range(1, num_hidden_layers):
+            model.add(Dense(self.num_neurons, activation='relu', name=f'layer_{i}'))
+
+        model.add(Dense(self.env.action_space.n, activation='linar'))
+        model.compile(loss='mse', optimizer=Adam(lr=learning_rate))
+        return model
     def add_experience(self, current_state, action, reward, next_state, done):
         proba = 1
         index = 0

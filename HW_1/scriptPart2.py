@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from sklearn.model_selection import ParameterGrid
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import SGD
 from tensorflow.python.keras.layers import Dense
 from tensorflow.python.keras.models import Sequential
 from tqdm import tqdm
@@ -62,8 +62,8 @@ class CartPoleAgent:
         for i in range(1, num_hidden_layers):
             model.add(Dense(self.num_neurons, activation='relu', name=f'layer_{i}'))
 
-        model.add(Dense(self.env.action_space.n, activation='linear'))
-        model.compile(loss='mse', optimizer=Adam(lr=learning_rate))
+        model.add(Dense(self.env.action_space.n, activation='softmax'))
+        model.compile(loss='mse', optimizer=SGD(lr=learning_rate))
         return model
 
     def NeuralNetwork(self, state):
@@ -306,7 +306,7 @@ if __name__ == '__main__':
         params = {"num_hidden_layers": [3, 5],
                   "minibatch_size": [20, 50, 70, 100],
                   "gamma": [0.95, 0.9, 0.99],
-                  "C": [10, 50, 100],
+                  "C": [10, 20, 15],
                   "epsilon_decay_factor": [0.99, 0.995],
                   "epsilon": [0.8, 0.5, 0.2],
                   "learning_rate": [0.0001, 0.001, 0.00001]}
