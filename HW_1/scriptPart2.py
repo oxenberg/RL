@@ -10,12 +10,13 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from sklearn.model_selection import ParameterGrid
-from tensorflow.keras.optimizers import Adam
 from tensorflow.python.keras.layers import Dense
 from tensorflow.python.keras.models import Sequential
+from keras.optimizers import SGD
 from tqdm import tqdm
 
 SEARCH_HP = False
+
 
 class CartPoleAgent:
     def __init__(self, memory_size):
@@ -63,7 +64,6 @@ class CartPoleAgent:
             model.add(Dense(self.num_neurons, activation='relu', name=f'layer_{i}'))
 
         model.add(Dense(self.env.action_space.n, activation='linear'))
-        model.compile(loss='mse', optimizer=Adam(lr=learning_rate))
         return model
 
     def NeuralNetwork(self, state):
@@ -197,7 +197,8 @@ class CartPoleAgent:
                     epsilon=0.8,
                     learning_rate=0.0005,
                     stopEpisode=None,
-                    epsilon_decay_factor=0.99):
+                    epsilon_decay_factor=0.99,
+                    clipnorm=False):
         '''
         Trains the agent to play on the cartpole environment using experience replay.
         Samples an action based on a decaying epsilon-greedy method.
@@ -215,7 +216,10 @@ class CartPoleAgent:
         not_converged = True
         self.init_log_files()
 
-        self.optimizer = keras.optimizers.SGD(learning_rate)
+        if clipnorm:
+            self.optimizer = SGD(learning_rate, clipnorm=1.0)
+        else:
+            self.optimizer = SGD(learning_rate)
 
         self.q_value_network = self._initialize_network(num_hidden_layers, learning_rate)
         self.target_network = self._initialize_network(num_hidden_layers, learning_rate)
