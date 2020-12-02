@@ -12,8 +12,8 @@ class CartPoleAgentPER(CartPoleAgent):
 
     def __init__(self, memory_size):
         CartPoleAgent.__init__(self, memory_size)
-        self.prioritization_epsilon = 0.1
-        self.prioritization_alpha = 0.1
+        self.prioritization_epsilon = 0.2
+        self.prioritization_alpha = 0.3
         self.Transition = recordtype('Transition',
                                      ['current_state', 'action', 'reward', 'next_state', 'done', "proba", "index"])
         
@@ -39,7 +39,7 @@ class CartPoleAgentPER(CartPoleAgent):
         for i in range(1, num_hidden_layers):
             model.add(Dense(self.num_neurons, activation='relu', name=f'layer_{i}'))
 
-        model.add(Dense(self.env.action_space.n, activation='linar'))
+        model.add(Dense(self.env.action_space.n, activation='linear'))
         model.compile(loss='mse', optimizer=Adam(lr=learning_rate))
         return model
     def add_experience(self, current_state, action, reward, next_state, done):
@@ -75,21 +75,22 @@ class CartPoleAgentPER(CartPoleAgent):
 
 
 if __name__ == '__main__':
-    agent = CartPoleAgentPER(memory_size=2000)
-    # params = {"num_hidden_layers": [3,5],
-    #           "minibatch_size": [50, 70, 100],
-    #           "gamma": [0.95, 0.9, 0.99],
-    #           "C": [10, 50, 100],
-    #           "epsilon_decay_factor":[0.99, 0.995],
-    #           "epsilon": [0.8, 0.82, 0.75],
-    #           "learning_rate": [0.0001, 0.001, 0.005]}
-    # gridSearch(params, agent, maxN=True)
+    agent = CartPoleAgentPER(memory_size=1000)
+    params = {"num_hidden_layers": [3,5],
+              "minibatch_size": [80, 140, 100],
+              "gamma": [0.95, 0.9, 0.995],
+              "C": [10, 20, 15],
+              "epsilon_decay_factor":[0.99, 0.995],
+              "epsilon": [0.2, 0.1, 0.4],
+              "learning_rate": [0.0001, 0.00001, 0.00005],
+              "clipnorm": [True]}
+    gridSearch(params, agent, maxN=True)
 
-    best_params = {'C': 10, 'epsilon': 0.2, 'epsilon_decay_factor': 0.995, 'gamma': 0.95, 'learning_rate': 1e-05,
-                   'minibatch_size': 100, 'num_hidden_layers': 3}
-    agent.train_agent(**best_params, stopEpisode=5000, clipnorm=True)
-    agent.test_agent(100)
+    # best_params = {'C': 10, 'epsilon': 0.2, 'epsilon_decay_factor': 0.995, 'gamma': 0.95, 'learning_rate': 1e-05,
+    #                'minibatch_size': 100, 'num_hidden_layers': 3}
+    # agent.train_agent(**best_params, stopEpisode=5000, clipnorm=True)
+    # agent.test_agent(100)
 
-    agent = CartPoleAgentPER(memory_size=10000)
-    agent.train_agent(num_hidden_layers=3)
-    agent.test_agent(100)
+    # agent = CartPoleAgentPER(memory_size=10000)
+    # agent.train_agent(num_hidden_layers=3)
+    # agent.test_agent(100)

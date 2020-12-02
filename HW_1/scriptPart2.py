@@ -32,7 +32,7 @@ class CartPoleAgent:
         self.env = gym.make('CartPole-v1')
         initial_state = self.env.reset()
         self._input_shape = initial_state.shape
-        self.num_neurons = 24
+        self.num_neurons = 26
         self.num_actions = self.env.action_space.n
         self.actions = [i for i in range(self.env.action_space.n)]
         self.convergedTH = 475
@@ -308,11 +308,15 @@ def gridSearch(parmas, agent, nSearch=10, maxEpochs=5000, maxN=False, aveOver=10
 
     gridSearchResults = []
     for paramsDict in tqdm(paramsList[:nSearch]):
-        agent.train_agent(stopEpisode=800, **paramsDict)
-        paramsDict['average_reward_last_100_episodes'] = np.mean(
-            agent.episodes_total_rewards[-100:])
-        print(paramsDict)
-        gridSearchResults.append(paramsDict)
+        try:
+            agent.train_agent(stopEpisode=1000, **paramsDict)
+            paramsDict['average_reward_last_100_episodes'] = np.mean(
+                agent.episodes_total_rewards[-100:])
+            print(paramsDict)
+            gridSearchResults.append(paramsDict)
+        except Exception as e:
+            print(e)
+            continue
 
     hyperparameterTable = pd.DataFrame(gridSearchResults)
     hyperparameterTable.sort_values("total_reward", inplace=True)
