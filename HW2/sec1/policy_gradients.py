@@ -1,11 +1,12 @@
+import collections
+from datetime import datetime
+
 import gym
 import numpy as np
 import tensorflow as tf
-import collections
-
-from tensorflow.python.client.session import Session
-from tensorflow.python.framework.ops import reset_default_graph
+from tensorflow.compat.v1 import Session
 from tensorflow.compat.v1 import placeholder
+from tensorflow.python.framework.ops import reset_default_graph
 from tensorflow.python.ops.init_ops import GlorotNormal
 from tensorflow.python.ops.nn_ops import softmax_cross_entropy_with_logits_v2
 from tensorflow.python.ops.variable_scope import get_variable
@@ -74,10 +75,11 @@ class PolicyNetwork:
         self.learning_rate = learning_rate
 
         with variable_scope(name):
-
             self.state = placeholder(tf.float32, [None, self.state_size], name="state")
             self.action = placeholder(tf.int32, [self.action_size], name="action")
             self.R_t = placeholder(tf.float32, name="total_rewards")
+            self.reward_per_episode = placeholder(tf.float32, name="reware_per_episode")
+            tf.compat.v1.summary.scalar('rewards', self.reward_per_episode)
 
             self.W1 = get_variable("W1", [self.state_size, 12], initializer=GlorotNormal(seed=0))
             self.b1 = get_variable("b1", [12], initializer=tf.zeros_initializer())
@@ -93,7 +95,9 @@ class PolicyNetwork:
             # Loss with negative log probability
             self.neg_log_prob = softmax_cross_entropy_with_logits_v2(logits=self.output, labels=self.action)
             self.loss = tf.reduce_mean(self.neg_log_prob * self.R_t)
+            tf.compat.v1.summary.scalar('loss', self.loss)
             self.optimizer = AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
+            self.merged = tf.compat.v1.summary.merge_all()
 
 
 ## Define hyperparameters
@@ -120,12 +124,15 @@ reset_default_graph()
 policy = PolicyNetwork(state_size, action_size, learning_rate)
 ValueFunction = ValueNetwork(state_size, learning_rate_value,num_hidden_layers,num_neurons)
 
-# TODO: create class for value network
-# TODO: add tensorboard
-
 # Start training the agent with REINFORCE algorithm
 with Session() as sess:
     sess.run(global_variables_initializer())
+
+    # initiate log files
+    current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
+    train_log_dir = '../logs/gradient_tape/' + current_time + '/train'
+    train_summary_writer = tf.compat.v1.summary.FileWriter(train_log_dir, sess.graph)
+
     solved = False
     Transition = collections.namedtuple("Transition", ["state", "action", "reward", "next_state", "done"])
     episode_rewards = np.zeros(max_episodes)
@@ -147,14 +154,17 @@ with Session() as sess:
 
             action_one_hot = np.zeros(action_size)
             action_one_hot[action] = 1
-            episode_transitions.append(Transition(state=state, action=action_one_hot, reward=reward, next_state=next_state, done=done))
+            episode_transitions.append(
+                Transition(state=state, action=action_one_hot, reward=reward, next_state=next_state, done=done))
             episode_rewards[episode] += reward
 
             if done:
                 if episode > 98:
                     # Check if solved
-                    average_rewards = np.mean(episode_rewards[(episode - 99):episode+1])
-                print("Episode {} Reward: {} Average over 100 episodes: {}".format(episode, episode_rewards[episode], round(average_rewards, 2)))
+                    average_rewards = np.mean(episode_rewards[(episode - 99):episode + 1])
+                print("Episode {} Reward: {} Average over 100 episodes: {}".format(episode,
+                                                                                   episode_rewards[episode],
+                                                                                   round(average_rewards, 2)))
                 if average_rewards > 475:
                     print(' Solved at episode: ' + str(episode))
                     solved = True
@@ -168,11 +178,13 @@ with Session() as sess:
         for t, transition in enumerate(episode_transitions):
             total_discounted_return = sum(discount_factor ** i * t.reward for i, t in enumerate(episode_transitions[t:])) # Rt
             ValueFunction.train_step(transition.state,np.array(total_discounted_return))
-            
+
             #base line improvment
             total_discounted_return -= ValueFunction.predict(transition.state)
-            
-            # ToDo: subtract value network baseline
-            # ToDo: update value network
-            feed_dict = {policy.state: transition.state, policy.R_t: total_discounted_return, policy.action: transition.action}
-            _, loss = sess.run([policy.optimizer, policy.loss], feed_dict)
+            feed_dict = {policy.state: transition.state,
+                         policy.R_t: total_discounted_return,
+                         policy.action: transition.action,
+                         policy.reward_per_episode: episode_rewards[episode]}
+            _, loss, summary = sess.run([policy.optimizer, policy.loss, policy.merged], feed_dict)
+
+        train_summary_writer.add_summary(summary, episode)
