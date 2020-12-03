@@ -205,7 +205,7 @@ class CartPoleAgent:
                     learning_rate=0.0005,
                     stopEpisode=None,
                     epsilon_decay_factor=0.99,
-                    clipnorm=False):
+                    clipnorm=None):
         '''
         Trains the agent to play on the cartpole environment using experience replay.
         Samples an action based on a decaying epsilon-greedy method.

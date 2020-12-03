@@ -1,11 +1,12 @@
 import numpy as np
 from recordtype import recordtype
+from tensorflow.keras.optimizers import Adam
 from tensorflow.python.keras.layers import Dense
 from tensorflow.python.keras.models import Sequential
-from tensorflow.keras.optimizers import Adam
 
-# from scriptPart2 import CartPoleAgent
-from scriptPart2 import CartPoleAgent,gridSearch
+from HW_1.scriptPart2 import CartPoleAgent
+
+
 
 
 class CartPoleAgentPER(CartPoleAgent):
@@ -16,9 +17,7 @@ class CartPoleAgentPER(CartPoleAgent):
         self.prioritization_alpha = 0.3
         self.Transition = recordtype('Transition',
                                      ['current_state', 'action', 'reward', 'next_state', 'done', "proba", "index"])
-        
-        
-        
+
     def _initialize_network(self, num_hidden_layers: int, learning_rate: float):
         '''
         Creates a neural network for the q-value function and the target function.
@@ -42,6 +41,7 @@ class CartPoleAgentPER(CartPoleAgent):
         model.add(Dense(self.env.action_space.n, activation='linear'))
         model.compile(loss='mse', optimizer=Adam(lr=learning_rate))
         return model
+
     def add_experience(self, current_state, action, reward, next_state, done):
         proba = 1
         index = 0
