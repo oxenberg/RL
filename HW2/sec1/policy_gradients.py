@@ -62,10 +62,10 @@ class ValueNetwork:
         self.learning_rate = learning_rate
         self.num_neurons = num_neurons
         self.num_hidden_layers = num_hidden_layers
-
         with variable_scope(name):
             self.state = placeholder(tf.float32, [None, self.state_size], name="state")
             self.total_discounted_return = placeholder(tf.float32, name="total_discounted_return")
+            self.delta = placeholder(tf.float32, name="delta")
 
             W1 = get_variable("W1", [self.state_size, self.num_neurons], initializer=GlorotNormal(seed=0))
             b1 = get_variable("b1", [self.num_neurons], initializer=tf.zeros_initializer())
@@ -83,6 +83,7 @@ class ValueNetwork:
             self.final_output = tf.add(tf.matmul(A, W), b)  # linear activation function
             # Softmax probability distribution over actions
             self.loss = mean_squared_error(self.total_discounted_return, self.final_output)
+            self.loss*=self.delta
             self.optimizer = AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
 
 def main():
