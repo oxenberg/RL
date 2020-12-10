@@ -9,8 +9,8 @@ from tensorflow.python.framework.ops import reset_default_graph
 ##v2 tf embaded
 from tensorflow.python.ops.variables import global_variables_initializer
 
-from HW2.sec1.policy_gradients import PolicyNetwork
-from HW2.sec1.policy_gradients import ValueNetwork
+from policy_gradients import PolicyNetwork
+from policy_gradients import ValueNetwork
 
 env = gym.make('CartPole-v1')
 
@@ -27,7 +27,7 @@ max_episodes = 5000
 max_steps = 501
 
 # policy
-discount_factor = 0.99
+discount_factor = 0.5
 learning_rate = 0.0004
 
 # ValueFunction
@@ -44,6 +44,9 @@ policy = PolicyNetwork(state_size, action_size, learning_rate)
 value_function = ValueNetwork(state_size, learning_rate_value, num_hidden_layers, num_neurons)
 
 # Start training the agent with REINFORCE algorithm
+
+print("Dsdsdsdsdsdsdsd")
+
 with Session() as sess:
     sess.run(global_variables_initializer())
 
@@ -67,7 +70,9 @@ with Session() as sess:
             action = np.random.choice(np.arange(len(actions_distribution)), p=actions_distribution)
             next_state, reward, done, _ = env.step(action)
             next_state = next_state.reshape([1, state_size])
-
+            
+            episode_rewards[episode] += reward
+            
             if render:
                 env.render()
 
@@ -78,7 +83,7 @@ with Session() as sess:
                                              {value_function.state: next_state,
                                               value_function.total_discounted_return: reward})
 
-            delta = reward + I * next_state_prediction - current_state_prediction
+            delta = reward + discount_factor * next_state_prediction[0] - current_state_prediction[0]
             sess.run([value_function.optimizer], {value_function.state: current_state,
                                                   value_function.total_discounted_return: delta})
 
@@ -87,14 +92,14 @@ with Session() as sess:
             feed_dict = {policy.state: current_state,
                          policy.R_t: delta,
                          policy.action: action_one_hot,
-                         policy.reward_per_episode: reward}  # ToDo: fix this
+                         policy.reward_per_episode: episode_rewards[episode]}  # ToDo: fix this
             _, _, loss, summary = sess.run([policy.output,
                                             policy.optimizer,
                                             policy.loss,
                                             policy.merged],
                                            feed_dict)
 
-            episode_rewards[episode] += reward
+            
             if done:
                 if episode > 98:
                     # Check if solved
