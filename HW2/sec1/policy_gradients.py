@@ -177,10 +177,10 @@ with Session() as sess:
         # Compute Rt for each time-step t and update the network's weights
         for t, transition in enumerate(episode_transitions):
             total_discounted_return = sum(discount_factor ** i * t.reward for i, t in enumerate(episode_transitions[t:])) # Rt
-            ValueFunction.train_step(transition.state,np.array(total_discounted_return))
+            # ValueFunction.train_step(transition.state,np.array(total_discounted_return))
 
-            #base line improvment
-            total_discounted_return -= ValueFunction.predict(transition.state)
+            # #base line improvment
+            # total_discounted_return -= ValueFunction.predict(transition.state)
             feed_dict = {policy.state: transition.state,
                          policy.R_t: total_discounted_return,
                          policy.action: transition.action,
