@@ -25,7 +25,7 @@ tf.compat.v1.disable_eager_execution()
 
 USE_BASELINE = False
 state_size = 4
-max_episodes = 2000
+max_episodes = 5000
 max_steps = 501
 action_size = env.action_space.n
 
@@ -34,7 +34,7 @@ render = False
 
 
 
-def gridSearch(parmas, nSearch=10, maxEpochs=5000, maxN=False, aveOver=10):
+def gridSearch(parmas, nSearch=1, maxN=False, aveOver=15):
     paramsList = list(ParameterGrid(parmas))
     shuffle(paramsList)
 
@@ -53,7 +53,7 @@ def gridSearch(parmas, nSearch=10, maxEpochs=5000, maxN=False, aveOver=10):
             continue
 
     hyperparameterTable = pd.DataFrame(gridSearchResults)
-    hyperparameterTable.sort_values("total_reward", inplace=True)
+    hyperparameterTable.sort_values("max_average_reward_100_episodes", inplace=True)
     hyperparameterTable.to_csv("Part2-HP.csv")
     print(hyperparameterTable)
 

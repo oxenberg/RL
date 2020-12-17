@@ -1,0 +1,2 @@
+,discount_factor,learning_rate,learning_rate_value,num_hidden_layers,num_neurons,max_average_reward_100_episodes
+0,0.9,0.008199999999999999,0.0013,2,20,317.55
