@@ -21,7 +21,7 @@ env = gym.make('CartPole-v1')
 np.random.seed(1)
 tf.compat.v1.disable_eager_execution()
 
-USE_BASELINE = False
+USE_BASELINE = True
 
 
 class PolicyNetwork:
@@ -90,61 +90,61 @@ def main():
     ## Define hyperparameters
     state_size = 4
     action_size = env.action_space.n
-    
+
     max_episodes = 5000
     max_steps = 501
-    
+
     # policy
     discount_factor = 0.99
     learning_rate = 0.0004
-    
+
     # ValueFunction
     discount_factor_value = 0.99
     learning_rate_value = 0.0004
     num_hidden_layers = 3
     num_neurons = 24
-    
+
     render = False
-    
+
     ## Initialize the policy network
     reset_default_graph()
     policy = PolicyNetwork(state_size, action_size, learning_rate)
     value_function = ValueNetwork(state_size, learning_rate_value, num_hidden_layers, num_neurons)
-    
+
     # Start training the agent with REINFORCE algorithm
     with Session() as sess:
         sess.run(global_variables_initializer())
-    
+
         # initiate log files
         current_time = datetime.now().strftime("%Y%m%d-%H%M%S") + ('-baseline' if USE_BASELINE else '')
         train_log_dir = '../logs/gradient_tape/' + current_time + '/train'
         train_summary_writer = tf.compat.v1.summary.FileWriter(train_log_dir, sess.graph)
-    
+
         solved = False
         Transition = collections.namedtuple("Transition", ["state", "action", "reward", "next_state", "done"])
         episode_rewards = np.zeros(max_episodes)
         average_rewards = 0.0
-    
+
         for episode in range(max_episodes):
             state = env.reset()
             state = state.reshape([1, state_size])
             episode_transitions = []
-    
+
             for step in range(max_steps):
                 actions_distribution = sess.run(policy.actions_distribution, {policy.state: state})
                 action = np.random.choice(np.arange(len(actions_distribution)), p=actions_distribution)
                 next_state, reward, done, _ = env.step(action)
                 next_state = next_state.reshape([1, state_size])
-    
+
                 if render:
                     env.render()
-    
+
                 action_one_hot = np.zeros(action_size)
                 action_one_hot[action] = 1
                 episode_transitions.append(
                     Transition(state=state, action=action_one_hot, reward=reward, next_state=next_state, done=done))
                 episode_rewards[episode] += reward
-    
+
                 if done:
                     if episode > 98:
                         # Check if solved
@@ -157,15 +157,15 @@ def main():
                         solved = True
                     break
                 state = next_state
-    
+
             if solved:
                 break
-    
+
             # Compute Rt for each time-step t and update the network's weights
             for t, transition in enumerate(episode_transitions):
                 total_discounted_return = sum(
                     discount_factor ** i * t.reward for i, t in enumerate(episode_transitions[t:]))  # Rt
-    
+
                 if USE_BASELINE:
                     prediction = sess.run([value_function.final_output],
                                           {value_function.state: transition.state,
@@ -173,7 +173,7 @@ def main():
                     total_discounted_return -= prediction[0][0]
                     sess.run([value_function.optimizer], {value_function.state: transition.state,
                                                           value_function.total_discounted_return: total_discounted_return})
-    
+
                 # base line improvment
                 feed_dict = {policy.state: transition.state,
                              policy.R_t: total_discounted_return,
@@ -184,7 +184,7 @@ def main():
                                                 policy.loss,
                                                 policy.merged],
                                                feed_dict)
-    
+
             train_summary_writer.add_summary(summary, episode)
 
 
