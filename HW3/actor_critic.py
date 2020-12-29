@@ -10,6 +10,7 @@ from sklearn.model_selection import ParameterGrid
 from tensorflow.compat.v1 import Session
 from tensorflow.compat.v1 import placeholder
 from tensorflow.compat.v1.losses import mean_squared_error
+from tensorflow.python.framework.ops import get_default_graph
 from tensorflow.python.framework.ops import reset_default_graph
 ##v2 tf embaded
 from tensorflow.python.ops.init_ops import GlorotNormal
@@ -20,6 +21,8 @@ from tensorflow.python.ops.variables import global_variables_initializer
 from tensorflow.python.training.adam import AdamOptimizer
 ##v2 tf embaded
 from tensorflow.python.training.saver import Saver
+from tensorflow.python.training.saver import import_meta_graph
+from tensorflow.python.training.saver import latest_checkpoint
 from tqdm import tqdm
 
 np.random.seed(1)
@@ -53,7 +56,7 @@ ENV_TO_STATE_SIZE = {
     OpenGymEnvs.MOUNTAIN_CAR: 2
 }
 
-MAX_EPISODES = 5000
+MAX_EPISODES = 1
 RENDER = False
 
 
@@ -92,24 +95,25 @@ class ValueNetwork:
         self.num_neurons = num_neurons
         self.num_hidden_layers = num_hidden_layers
         with variable_scope(name):
-            self.state = placeholder(tf.float32, [None, STATE_SIZE], name="state")
-            self.total_discounted_return = placeholder(tf.float32, name="total_discounted_return")
-            self.delta = placeholder(tf.float32, name="delta")
+            self.state = placeholder(tf.float32, [None, STATE_SIZE], name=f"{name}_state")
+            self.total_discounted_return = placeholder(tf.float32, name=f"{name}_total_discounted_return")
+            self.delta = placeholder(tf.float32, name=f"{name}_delta")
 
-            W1 = get_variable("W1", [STATE_SIZE, self.num_neurons], initializer=GlorotNormal(seed=0))
-            b1 = get_variable("b1", [self.num_neurons], initializer=tf.zeros_initializer())
+            W1 = get_variable(f"{name}_W1", [STATE_SIZE, self.num_neurons], initializer=GlorotNormal(seed=0))
+            b1 = get_variable(f"{name}_b1", [self.num_neurons], initializer=tf.zeros_initializer())
             Z1 = tf.add(tf.matmul(self.state, W1), b1)
             A = tf.nn.relu(Z1)
 
             for i in range(2, self.num_hidden_layers + 1):
-                W = get_variable(f"W{i}", [self.num_neurons, self.num_neurons], initializer=GlorotNormal(seed=0))
-                b = get_variable(f"b{i}", [self.num_neurons], initializer=tf.zeros_initializer())
+                W = get_variable(f"{name}_W{i}", [self.num_neurons, self.num_neurons], initializer=GlorotNormal(seed=0))
+                b = get_variable(f"{name}_b{i}", [self.num_neurons], initializer=tf.zeros_initializer())
                 Z = tf.add(tf.matmul(A, W), b)
                 A = tf.nn.relu(Z)
 
-            W = get_variable(f"W{self.num_hidden_layers + 1}", [self.num_neurons, 1], initializer=GlorotNormal(seed=0))
-            b = get_variable(f"b{self.num_hidden_layers + 1}", [1], initializer=tf.zeros_initializer())
-            self.final_output = tf.add(tf.matmul(A, W), b)  # linear activation function
+            W = get_variable(f"{name}_W{self.num_hidden_layers + 1}", [self.num_neurons, 1],
+                             initializer=GlorotNormal(seed=0))
+            b = get_variable(f"{name}_b{self.num_hidden_layers + 1}", [1], initializer=tf.zeros_initializer())
+            self.final_output = tf.add(tf.matmul(A, W), b, name=f"{name}_final_output")  # linear activation function
             # Softmax probability distribution over actions
             self.loss = mean_squared_error(self.total_discounted_return, self.final_output)
             self.loss *= self.delta
@@ -208,10 +212,10 @@ class Agent:
                     I *= discount_factor
 
                 if solved:
-                    saver.save(sess, f'./{self.env_name}')
                     break
 
                 train_summary_writer.add_summary(summary, episode)
+            saver.save(sess, f'{self.env_name}')
 
         return max(all_avg)
 
@@ -251,7 +255,14 @@ def run_grid_search():
 
 
 if __name__ == '__main__':
-# agent = Agent(OpenGymEnvs.CARTPOLE)
-# best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
-#                    'num_hidden_layers': 2, 'num_neurons': 64}
-# ret = agent.run(**best_parameters)
+    agent = Agent(OpenGymEnvs.CARTPOLE)
+    best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
+                       'num_hidden_layers': 2, 'num_neurons': 64}
+    ret = agent.run(**best_parameters)
+
+    with Session() as sess:
+        saver = import_meta_graph(f'./{OpenGymEnvs.CARTPOLE.value}.meta')
+        saver.restore(sess, latest_checkpoint('./'))
+        graph = get_default_graph()
+        graph.get_tensor_by_name('W1:policy')
+        print()
