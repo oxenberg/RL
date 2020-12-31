@@ -56,15 +56,16 @@ ENV_TO_STATE_SIZE = {
     OpenGymEnvs.MOUNTAIN_CAR: 2
 }
 
-MAX_EPISODES = 1
+MAX_EPISODES = 5
 RENDER = False
 
 
 class PolicyNetwork:
-    def __init__(self, learning_rate, name='policy_network'):
+    def __init__(self, learning_rate, name='policy_network',retrain = False):
         self.learning_rate = learning_rate
+        self.name = name
 
-        with variable_scope(name):
+        with variable_scope(self.name):
             self.state = placeholder(tf.float32, [None, STATE_SIZE], name="state")
             self.action = placeholder(tf.int32, [ACTION_SIZE], name="action")
             self.R_t = placeholder(tf.float32, name="total_rewards")
@@ -75,7 +76,9 @@ class PolicyNetwork:
             self.b1 = get_variable("b1", [12], initializer=tf.zeros_initializer())
             self.W2 = get_variable("W2", [12, ACTION_SIZE], initializer=GlorotNormal(seed=0))
             self.b2 = get_variable("b2", [ACTION_SIZE], initializer=tf.zeros_initializer())
-
+            if retrain:
+                self.W2 = get_variable("W2_retrain", [12, ACTION_SIZE], initializer=GlorotNormal(seed=0))
+                self.b2 = get_variable("b2_retrain", [ACTION_SIZE], initializer=tf.zeros_initializer())
             self.Z1 = tf.add(tf.matmul(self.state, self.W1), self.b1)
             self.A1 = tf.nn.relu(self.Z1)
             self.output = tf.add(tf.matmul(self.A1, self.W2), self.b2)
@@ -87,6 +90,12 @@ class PolicyNetwork:
             self.loss = tf.reduce_mean(self.neg_log_prob * self.R_t)
             self.optimizer = AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
             self.merged = tf.compat.v1.summary.merge_all()
+            
+            self.var_to_save = [self.W1,self.b1]
+    def reset_output_layer(self):
+        with variable_scope(self.name,reuse=True):
+            return self.W2.assign(get_variable("W2_retrain", [12, ACTION_SIZE], initializer=GlorotNormal(seed=0)))
+            
 
 
 class ValueNetwork:
@@ -98,15 +107,18 @@ class ValueNetwork:
             self.state = placeholder(tf.float32, [None, STATE_SIZE], name=f"{name}_state")
             self.total_discounted_return = placeholder(tf.float32, name=f"{name}_total_discounted_return")
             self.delta = placeholder(tf.float32, name=f"{name}_delta")
-
+            self.var_to_save = []
+            
             W1 = get_variable(f"{name}_W1", [STATE_SIZE, self.num_neurons], initializer=GlorotNormal(seed=0))
             b1 = get_variable(f"{name}_b1", [self.num_neurons], initializer=tf.zeros_initializer())
+            self.var_to_save.extend([W1,b1])
             Z1 = tf.add(tf.matmul(self.state, W1), b1)
             A = tf.nn.relu(Z1)
 
             for i in range(2, self.num_hidden_layers + 1):
                 W = get_variable(f"{name}_W{i}", [self.num_neurons, self.num_neurons], initializer=GlorotNormal(seed=0))
                 b = get_variable(f"{name}_b{i}", [self.num_neurons], initializer=tf.zeros_initializer())
+                self.var_to_save.extend([W,b])
                 Z = tf.add(tf.matmul(A, W), b)
                 A = tf.nn.relu(Z)
 
@@ -128,15 +140,27 @@ class Agent:
         self.original_action_size = ENV_TO_ACTION_SIZE[env_name]
         self.original_state_size = ENV_TO_STATE_SIZE[env_name]
 
-    def run(self, discount_factor, learning_rate, learning_rate_value, num_hidden_layers, num_neurons):
+    def run(self, discount_factor, learning_rate, learning_rate_value,
+            num_hidden_layers, num_neurons,restore_sess = False):
         ## Initialize the policy network
         reset_default_graph()
-        self.policy = PolicyNetwork(learning_rate)
+        self.policy = PolicyNetwork(learning_rate,retrain = restore_sess)
         self.value_function = ValueNetwork(learning_rate_value, num_hidden_layers, num_neurons)
+        
+        
+        
+        saver = Saver(var_list = self.policy.var_to_save)
+        
 
-        saver = Saver()
         with Session() as sess:
             sess.run(global_variables_initializer())
+            
+            if restore_sess :
+                # print(f"w2 before restore: {self.policy.W2.eval()}")
+                saver.restore(sess, "/tmp/model.ckpt")
+                print(f"w2 after restore: {self.policy.W1.eval()}")
+                # x = self.policy.reset_output_layer()
+                # print(f"w2 after reset: {x.eval()}")
 
             # initiate log files
             current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -146,7 +170,7 @@ class Agent:
             all_avg = []
             solved = False
             episode_rewards = np.zeros(MAX_EPISODES)
-            average_rewards = 0.0
+            average_rewards = -np.inf
 
             for episode in range(MAX_EPISODES):
                 current_state = self.env.reset()
@@ -215,54 +239,61 @@ class Agent:
                     break
 
                 train_summary_writer.add_summary(summary, episode)
-            saver.save(sess, f'{self.env_name}')
-
+            # saver.save(sess, f'{self.env_name}')
+            save_path = saver.save(sess, "/tmp/model.ckpt")
+            print(f"w2 before save: {self.policy.W1.eval()}")
+            print("Model saved in path: %s" % save_path)
         return max(all_avg)
 
 
-def gridSearch(parmas, nSearch=10, maxN=False):
-    paramsList = list(ParameterGrid(parmas))
-    shuffle(paramsList)
+# def gridSearch(parmas, nSearch=10, maxN=False):
+#     paramsList = list(ParameterGrid(parmas))
+#     shuffle(paramsList)
 
-    if nSearch > len(paramsList) or maxN:
-        nSearch = len(paramsList)
+#     if nSearch > len(paramsList) or maxN:
+#         nSearch = len(paramsList)
 
-    gridSearchResults = []
-    for paramsDict in tqdm(paramsList[:nSearch]):
-        try:
-            max_reward_avg = run(**paramsDict)
-            paramsDict['max_average_reward_100_episodes'] = max_reward_avg
-            print(paramsDict)
-            gridSearchResults.append(paramsDict)
-        except Exception as e:
-            print(e)
-            continue
+#     gridSearchResults = []
+#     for paramsDict in tqdm(paramsList[:nSearch]):
+#         try:
+#             max_reward_avg = run(**paramsDict)
+#             paramsDict['max_average_reward_100_episodes'] = max_reward_avg
+#             print(paramsDict)
+#             gridSearchResults.append(paramsDict)
+#         except Exception as e:
+#             print(e)
+#             continue
 
-    hyperparameterTable = pd.DataFrame(gridSearchResults)
-    hyperparameterTable.sort_values("max_average_reward_100_episodes", inplace=True)
-    hyperparameterTable.to_csv("Part2-HP.csv")
-    print(hyperparameterTable)
+#     hyperparameterTable = pd.DataFrame(gridSearchResults)
+#     hyperparameterTable.sort_values("max_average_reward_100_episodes", inplace=True)
+#     hyperparameterTable.to_csv("Part2-HP.csv")
+#     print(hyperparameterTable)
 
 
-def run_grid_search():
-    params = {"discount_factor": [0.99, 0.9, 0.95],
-              "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
-              "learning_rate_value": [0.01, 0.001, 0.0001, 0.00001],
-              "num_hidden_layers": [2, 3, 5],
-              "num_neurons": [8, 16, 32, 64]}
+# def run_grid_search():
+#     params = {"discount_factor": [0.99, 0.9, 0.95],
+#               "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
+#               "learning_rate_value": [0.01, 0.001, 0.0001, 0.00001],
+#               "num_hidden_layers": [2, 3, 5],
+#               "num_neurons": [8, 16, 32, 64]}
 
-    gridSearch(params)
+#     gridSearch(params)
 
 
 if __name__ == '__main__':
-    agent = Agent(OpenGymEnvs.CARTPOLE)
+    agent = Agent(OpenGymEnvs.ACROBOT)
     best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
                        'num_hidden_layers': 2, 'num_neurons': 64}
     ret = agent.run(**best_parameters)
+    ret = agent.run(**best_parameters,restore_sess = True)
 
-    with Session() as sess:
-        saver = import_meta_graph(f'./{OpenGymEnvs.CARTPOLE.value}.meta')
-        saver.restore(sess, latest_checkpoint('./'))
-        graph = get_default_graph()
-        graph.get_tensor_by_name('W1:policy')
-        print()
+    # reset_default_graph()
+    # W1 = get_variable("W1", [STATE_SIZE, 12], initializer=GlorotNormal(seed=0))
+    
+    # with Session() as sess:
+    #     saver = Saver()
+    #     saver.restore(sess, "/tmp/model1.ckpt")
+    #     print("W1 : %s" % W1.eval())
+        
+        
+    #     print()
