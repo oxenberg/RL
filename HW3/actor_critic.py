@@ -61,7 +61,7 @@ RENDER = False
 
 
 class PolicyNetwork:
-    def __init__(self, learning_rate, name='policy_network',retrain = False):
+    def __init__(self, learning_rate, name='policy_network',retrain = False,mountain_car = False):
         self.learning_rate = learning_rate
         self.name = name
 
@@ -79,15 +79,31 @@ class PolicyNetwork:
             if retrain:
                 self.W2 = get_variable("W2_retrain", [12, ACTION_SIZE], initializer=GlorotNormal(seed=0))
                 self.b2 = get_variable("b2_retrain", [ACTION_SIZE], initializer=tf.zeros_initializer())
+                
             self.Z1 = tf.add(tf.matmul(self.state, self.W1), self.b1)
             self.A1 = tf.nn.relu(self.Z1)
-            self.output = tf.add(tf.matmul(self.A1, self.W2), self.b2)
-
-            # Softmax probability distribution over actions
-            self.actions_distribution = tf.squeeze(tf.nn.softmax(self.output))
-            # Loss with negative log probability
-            self.neg_log_prob = softmax_cross_entropy_with_logits_v2(logits=self.output, labels=self.action)
-            self.loss = tf.reduce_mean(self.neg_log_prob * self.R_t)
+            if mountain_car:
+                self.output_mu = tf.add(tf.matmul(self.A1, self.W2), self.b2)
+                self.output_var = tf.add(tf.matmul(self.A1, self.W2), self.b2)
+                
+                self.output_mu = tf.squeeze(self.output_mu)
+                self.output_var = tf.squeeze(self.output_var)
+                self.output_var = tf.nn.softplus(self.output_var) + 1e-5
+                self.normal_dist = tf.contrib.distributions.Normal(self.output_mu, self.output_var)
+                self.action = self.normal_dist._sample_n(1)
+                self.actions_distribution = tf.clip_by_value(self.action, -1,1)
+                # Loss and train op
+                self.loss = -self.normal_dist.log_prob(self.action) * self.R_t
+                # Add cross entropy cost to encourage exploration
+                self.loss -= 1e-1 * self.normal_dist.entropy()
+            else:
+                self.output = tf.add(tf.matmul(self.A1, self.W2), self.b2)
+                
+                # Softmax probability distribution over actions
+                self.actions_distribution = tf.squeeze(tf.nn.softmax(self.output))
+                # Loss with negative log probability
+                self.neg_log_prob = softmax_cross_entropy_with_logits_v2(logits=self.output, labels=self.action)
+                self.loss = tf.reduce_mean(self.neg_log_prob * self.R_t)
             self.optimizer = AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
             self.merged = tf.compat.v1.summary.merge_all()
             
@@ -135,6 +151,8 @@ class ValueNetwork:
 class Agent:
     def __init__(self, env_name):
         self.env_name = env_name.value
+            
+        
         self.env = gym.make(self.env_name)
         self.convergence_treshold = ENV_TO_REWARD_THRESHOLD[env_name]
         self.original_action_size = ENV_TO_ACTION_SIZE[env_name]
@@ -144,9 +162,13 @@ class Agent:
             num_hidden_layers, num_neurons,restore_sess = False):
         ## Initialize the policy network
         reset_default_graph()
-        self.policy = PolicyNetwork(learning_rate,retrain = restore_sess)
+        
+        mountain_car = self.env_name == OpenGymEnvs.MOUNTAIN_CAR.value
+
+        self.policy = PolicyNetwork(learning_rate,retrain = restore_sess,mountain_car = mountain_car)
         self.value_function = ValueNetwork(learning_rate_value, num_hidden_layers, num_neurons)
         
+
         
         
         saver = Saver(var_list = self.policy.var_to_save)
@@ -180,9 +202,12 @@ class Agent:
                 while True:
                     actions_distribution = sess.run(self.policy.actions_distribution,
                                                     {self.policy.state: current_state})
-                    actions_distribution = actions_distribution[:self.original_action_size]
-                    actions_distribution = actions_distribution / actions_distribution.sum()
-                    action = np.random.choice(np.arange(self.original_action_size), p=actions_distribution)
+                    if not mountain_car:
+                        actions_distribution = actions_distribution[:self.original_action_size]
+                        actions_distribution = actions_distribution / actions_distribution.sum()
+                        action = np.random.choice(np.arange(self.original_action_size), p=actions_distribution)
+                    else:
+                        action = actions_distribution[0]
                     next_state, reward, done, _ = self.env.step(action)
                     next_state = np.reshape(np.pad(next_state, (0, STATE_SIZE - self.original_state_size)),
                                             [1, STATE_SIZE])
@@ -281,7 +306,7 @@ class Agent:
 
 
 if __name__ == '__main__':
-    agent = Agent(OpenGymEnvs.ACROBOT)
+    agent = Agent(OpenGymEnvs.MOUNTAIN_CAR)
     best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
                        'num_hidden_layers': 2, 'num_neurons': 64}
     ret = agent.run(**best_parameters)
