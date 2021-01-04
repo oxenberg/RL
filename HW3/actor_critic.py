@@ -69,7 +69,7 @@ class PolicyNetwork:
         self.nurons = 40
         with variable_scope(self.name):
             self.state = placeholder(tf.float32, [None, STATE_SIZE], name="state")
-            self.action = placeholder(tf.int32, [ACTION_SIZE], name="action")
+            self.action = placeholder(tf.float32, [ACTION_SIZE], name="action")
             self.R_t = placeholder(tf.float32, name="total_rewards")
             self.reward_per_episode = placeholder(tf.float32, name="reware_per_episode")
             tf.compat.v1.summary.scalar('rewards', self.reward_per_episode)
@@ -92,13 +92,13 @@ class PolicyNetwork:
                 self.output_var = tf.squeeze(self.output_var)
                 self.output_var = tf.nn.softplus(self.output_var) + 1e-5
                 self.normal_dist = Normal(self.output_mu, self.output_var)
-                self.sampled_action = self.normal_dist._sample_n(1)
+                self.sampled_action = tf.squeeze(self.normal_dist._sample_n(1),axis = 0)
                 self.actions_distribution = tf.clip_by_value(self.sampled_action, -1,1)
-                self.actions_distribution = tf.squeeze(self.actions_distribution)
                 # Loss and train op
-                self.loss = tf.reduce_mean(-self.normal_dist.log_prob(self.actions_distribution) * self.R_t)
+                
+                self.loss = -tf.math.log(self.normal_dist.prob(tf.squeeze(self.action))+ 1e-5) * self.R_t
                 # Add cross entropy cost to encourage exploration
-                self.loss -= 1e-1 * self.normal_dist.entropy()
+                # self.loss -= 1e-1 * self.normal_dist.entropy()
             else:
                 self.output = tf.add(tf.matmul(self.A1, self.W2), self.b2)
                 
@@ -314,11 +314,11 @@ def run_grid_search(env):
 
 if __name__ == '__main__':
     agent = Agent(OpenGymEnvs.MOUNTAIN_CAR)
-    # best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
-    #                    'num_hidden_layers': 2, 'num_neurons': 64}
+    best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
+                        'num_hidden_layers': 2, 'num_neurons': 64}
     #: mountain car
-    best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.00002, 'learning_rate_value': 0.001,
-                      'num_hidden_layers': 2, 'num_neurons': 400}
+    # best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.00002, 'learning_rate_value': 0.001,
+    #                   'num_hidden_layers': 2, 'num_neurons': 400}
     
     # run_grid_search(OpenGymEnvs.MOUNTAIN_CAR)
     ret = agent.run(**best_parameters)
