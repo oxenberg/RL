@@ -23,6 +23,8 @@ from tensorflow.python.training.adam import AdamOptimizer
 from tensorflow.python.training.saver import Saver
 from tensorflow.python.training.saver import import_meta_graph
 from tensorflow.python.training.saver import latest_checkpoint
+from tensorflow.python.ops.distributions.normal import Normal
+
 from tqdm import tqdm
 
 np.random.seed(1)
@@ -56,7 +58,7 @@ ENV_TO_STATE_SIZE = {
     OpenGymEnvs.MOUNTAIN_CAR: 2
 }
 
-MAX_EPISODES = 5
+MAX_EPISODES = 300
 RENDER = False
 
 
@@ -64,7 +66,7 @@ class PolicyNetwork:
     def __init__(self, learning_rate, name='policy_network',retrain = False,mountain_car = False):
         self.learning_rate = learning_rate
         self.name = name
-
+        self.nurons = 40
         with variable_scope(self.name):
             self.state = placeholder(tf.float32, [None, STATE_SIZE], name="state")
             self.action = placeholder(tf.int32, [ACTION_SIZE], name="action")
@@ -72,12 +74,12 @@ class PolicyNetwork:
             self.reward_per_episode = placeholder(tf.float32, name="reware_per_episode")
             tf.compat.v1.summary.scalar('rewards', self.reward_per_episode)
 
-            self.W1 = get_variable("W1", [STATE_SIZE, 12], initializer=GlorotNormal(seed=0))
-            self.b1 = get_variable("b1", [12], initializer=tf.zeros_initializer())
-            self.W2 = get_variable("W2", [12, ACTION_SIZE], initializer=GlorotNormal(seed=0))
+            self.W1 = get_variable("W1", [STATE_SIZE, self.nurons], initializer=GlorotNormal(seed=0))
+            self.b1 = get_variable("b1", [self.nurons], initializer=tf.zeros_initializer())
+            self.W2 = get_variable("W2", [self.nurons, ACTION_SIZE], initializer=GlorotNormal(seed=0))
             self.b2 = get_variable("b2", [ACTION_SIZE], initializer=tf.zeros_initializer())
             if retrain:
-                self.W2 = get_variable("W2_retrain", [12, ACTION_SIZE], initializer=GlorotNormal(seed=0))
+                self.W2 = get_variable("W2_retrain", [self.nurons, ACTION_SIZE], initializer=GlorotNormal(seed=0))
                 self.b2 = get_variable("b2_retrain", [ACTION_SIZE], initializer=tf.zeros_initializer())
                 
             self.Z1 = tf.add(tf.matmul(self.state, self.W1), self.b1)
@@ -89,11 +91,12 @@ class PolicyNetwork:
                 self.output_mu = tf.squeeze(self.output_mu)
                 self.output_var = tf.squeeze(self.output_var)
                 self.output_var = tf.nn.softplus(self.output_var) + 1e-5
-                self.normal_dist = tf.contrib.distributions.Normal(self.output_mu, self.output_var)
-                self.action = self.normal_dist._sample_n(1)
-                self.actions_distribution = tf.clip_by_value(self.action, -1,1)
+                self.normal_dist = Normal(self.output_mu, self.output_var)
+                self.sampled_action = self.normal_dist._sample_n(1)
+                self.actions_distribution = tf.clip_by_value(self.sampled_action, -1,1)
+                self.actions_distribution = tf.squeeze(self.actions_distribution)
                 # Loss and train op
-                self.loss = -self.normal_dist.log_prob(self.action) * self.R_t
+                self.loss = tf.reduce_mean(-self.normal_dist.log_prob(self.actions_distribution) * self.R_t)
                 # Add cross entropy cost to encourage exploration
                 self.loss -= 1e-1 * self.normal_dist.entropy()
             else:
@@ -207,7 +210,7 @@ class Agent:
                         actions_distribution = actions_distribution / actions_distribution.sum()
                         action = np.random.choice(np.arange(self.original_action_size), p=actions_distribution)
                     else:
-                        action = actions_distribution[0]
+                        action = [actions_distribution[0]]
                     next_state, reward, done, _ = self.env.step(action)
                     next_state = np.reshape(np.pad(next_state, (0, STATE_SIZE - self.original_state_size)),
                                             [1, STATE_SIZE])
@@ -233,13 +236,15 @@ class Agent:
                                                                self.value_function.delta: 1})
 
                     action_one_hot = np.zeros(ACTION_SIZE)
-                    action_one_hot[action] = 1
+                    if mountain_car:
+                        action_one_hot[0] = action[0]
+                    else:
+                        action_one_hot[action] = 1
                     feed_dict = {self.policy.state: current_state,
                                  self.policy.R_t: delta,
                                  self.policy.action: action_one_hot,
                                  self.policy.reward_per_episode: episode_rewards[episode]}
-                    _, _, loss, summary = sess.run([self.policy.output,
-                                                    self.policy.optimizer,
+                    _, loss, summary = sess.run([self.policy.optimizer,
                                                     self.policy.loss,
                                                     self.policy.merged],
                                                    feed_dict)
@@ -271,46 +276,53 @@ class Agent:
         return max(all_avg)
 
 
-# def gridSearch(parmas, nSearch=10, maxN=False):
-#     paramsList = list(ParameterGrid(parmas))
-#     shuffle(paramsList)
+def gridSearch(parmas, env_name, nSearch=10, maxN=False):
+    paramsList = list(ParameterGrid(parmas))
+    shuffle(paramsList)
 
 #     if nSearch > len(paramsList) or maxN:
 #         nSearch = len(paramsList)
 
-#     gridSearchResults = []
-#     for paramsDict in tqdm(paramsList[:nSearch]):
-#         try:
-#             max_reward_avg = run(**paramsDict)
-#             paramsDict['max_average_reward_100_episodes'] = max_reward_avg
-#             print(paramsDict)
-#             gridSearchResults.append(paramsDict)
-#         except Exception as e:
-#             print(e)
-#             continue
+    gridSearchResults = []
+    agent = Agent(env_name)
+    for paramsDict in tqdm(paramsList[:nSearch]):
+        try:
+            max_reward_avg = agent.run(**paramsDict)
+            paramsDict['max_average_reward_100_episodes'] = max_reward_avg
+            print(paramsDict)
+            gridSearchResults.append(paramsDict)
+        except Exception as e:
+            print(e)
+            continue
 
-#     hyperparameterTable = pd.DataFrame(gridSearchResults)
-#     hyperparameterTable.sort_values("max_average_reward_100_episodes", inplace=True)
-#     hyperparameterTable.to_csv("Part2-HP.csv")
-#     print(hyperparameterTable)
+    hyperparameterTable = pd.DataFrame(gridSearchResults)
+    hyperparameterTable.sort_values("max_average_reward_100_episodes", inplace=True)
+    hyperparameterTable.to_csv(f"HP-{env_name.value}.csv")
+    print(hyperparameterTable)
 
 
-# def run_grid_search():
-#     params = {"discount_factor": [0.99, 0.9, 0.95],
-#               "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
-#               "learning_rate_value": [0.01, 0.001, 0.0001, 0.00001],
-#               "num_hidden_layers": [2, 3, 5],
-#               "num_neurons": [8, 16, 32, 64]}
+def run_grid_search(env):
+    params = {"discount_factor": [0.99, 0.9, 0.95],
+              "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
+              "learning_rate_value": [0.01, 0.001, 0.0001, 0.00001],
+              "num_hidden_layers": [2, 3, 5],
+              "num_neurons": [8, 16, 32, 64]}
+    
 
-#     gridSearch(params)
+    gridSearch(params, env)
 
 
 if __name__ == '__main__':
     agent = Agent(OpenGymEnvs.MOUNTAIN_CAR)
-    best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
-                       'num_hidden_layers': 2, 'num_neurons': 64}
+    # best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
+    #                    'num_hidden_layers': 2, 'num_neurons': 64}
+    #: mountain car
+    best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.00002, 'learning_rate_value': 0.001,
+                      'num_hidden_layers': 2, 'num_neurons': 400}
+    
+    # run_grid_search(OpenGymEnvs.MOUNTAIN_CAR)
     ret = agent.run(**best_parameters)
-    ret = agent.run(**best_parameters,restore_sess = True)
+    # ret = agent.run(**best_parameters,restore_sess = True)
 
     # reset_default_graph()
     # W1 = get_variable("W1", [STATE_SIZE, 12], initializer=GlorotNormal(seed=0))
