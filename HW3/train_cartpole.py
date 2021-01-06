@@ -1,5 +1,5 @@
-from HW3.actor_critic import Agent
-from HW3.actor_critic import OpenGymEnvs
+from actor_critic import Agent
+from actor_critic import OpenGymEnvs
 
 
 def transfer_from_acrobot():

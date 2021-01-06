@@ -54,7 +54,7 @@ ENV_TO_STATE_SIZE = {
     OpenGymEnvs.MOUNTAIN_CAR: 2
 }
 
-MAX_EPISODES = 5000
+MAX_EPISODES = 200
 RENDER = False
 
 
@@ -62,7 +62,9 @@ class PolicyNetwork:
     def __init__(self, learning_rate, name='policy_network', retrain=False, mountain_car=False):
         self.learning_rate = learning_rate
         self.name = name
-        self.neurons = 40
+        self.neurons = 12
+        
+        self.init = tf.initializers.GlorotUniform()
         with variable_scope(self.name):
             self.state = placeholder(
                 tf.float32, [None, STATE_SIZE], name="state")
@@ -73,11 +75,11 @@ class PolicyNetwork:
             tf.compat.v1.summary.scalar('rewards', self.reward_per_episode)
 
             self.W1 = get_variable(
-                "W1", [STATE_SIZE, self.neurons], initializer=GlorotNormal(seed=0))
+                "W1", [STATE_SIZE, self.neurons], initializer=self.init)
             self.b1 = get_variable(
                 "b1", [self.neurons], initializer=tf.zeros_initializer())
             self.W2 = get_variable(
-                "W2", [self.neurons, ACTION_SIZE], initializer=GlorotNormal(seed=0))
+                "W2", [self.neurons, ACTION_SIZE], initializer=self.init)
             self.b2 = get_variable(
                 "b2", [ACTION_SIZE], initializer=tf.zeros_initializer())
             if retrain:
@@ -310,6 +312,7 @@ def gridSearch(parmas, env_name, nSearch=10, maxN=False):
     agent = Agent(env_name)
     for paramsDict in tqdm(paramsList[:nSearch]):
         try:
+            print(paramsDict)
             max_reward_avg = agent.run(**paramsDict)
             paramsDict['max_average_reward_100_episodes'] = max_reward_avg
             print(paramsDict)
@@ -337,11 +340,11 @@ def run_grid_search(env):
 
 if __name__ == '__main__':
     agent = Agent(OpenGymEnvs.MOUNTAIN_CAR)
-    best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
-                       'num_hidden_layers': 2, 'num_neurons': 64}
+    # best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
+    #                    'num_hidden_layers': 2, 'num_neurons': 64}
     #: mountain car
-    # best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.00002, 'learning_rate_value': 0.001,
-    #                   'num_hidden_layers': 2, 'num_neurons': 400}
+    best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.00002, 'learning_rate_value': 0.001,
+                      'num_hidden_layers': 2, 'num_neurons': 400}
 
     # run_grid_search(OpenGymEnvs.MOUNTAIN_CAR)
     ret = agent.run(**best_parameters)
