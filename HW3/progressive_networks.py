@@ -1,71 +1,36 @@
-from datetime import datetime
-from enum import Enum
-from random import shuffle
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Jan  6 20:20:33 2021
 
+@author: oxenb
+"""
+from datetime import datetime
 import gym
 import numpy as np
-import pandas as pd
 import tensorflow as tf
-from sklearn.model_selection import ParameterGrid
 from tensorflow.compat.v1 import Session
-from tensorflow.compat.v1 import placeholder
-from tensorflow.compat.v1.losses import mean_squared_error
+
 from tensorflow.python.framework.ops import reset_default_graph
-from tensorflow.python.ops.distributions.normal import Normal
 # v2 tf embaded
-from tensorflow.python.ops.init_ops import GlorotNormal
-from tensorflow.python.ops.nn_ops import softmax_cross_entropy_with_logits_v2
-from tensorflow.python.ops.variable_scope import get_variable
-from tensorflow.python.ops.variable_scope import variable_scope
 from tensorflow.python.ops.variables import global_variables_initializer
-from tensorflow.python.training.adam import AdamOptimizer
 # v2 tf embaded
 from tensorflow.python.training.saver import Saver
-from tqdm import tqdm
-
-# np.random.seed(1)
-tf.compat.v1.disable_eager_execution()
-
-STATE_SIZE = 6
-ACTION_SIZE = 3
-
-
-class OpenGymEnvs(Enum):
-    CARTPOLE = 'CartPole-v1'
-    ACROBOT = 'Acrobot-v1'
-    MOUNTAIN_CAR = 'MountainCarContinuous-v0'
-
-
-ENV_TO_REWARD_THRESHOLD = {
-    OpenGymEnvs.CARTPOLE: 475,
-    OpenGymEnvs.ACROBOT: -100,
-    OpenGymEnvs.MOUNTAIN_CAR: 90
-}
-
-ENV_TO_ACTION_SIZE = {
-    OpenGymEnvs.CARTPOLE: 2,
-    OpenGymEnvs.ACROBOT: 3,
-    OpenGymEnvs.MOUNTAIN_CAR: 1
-}
-
-ENV_TO_STATE_SIZE = {
-    OpenGymEnvs.CARTPOLE: 4,
-    OpenGymEnvs.ACROBOT: 6,
-    OpenGymEnvs.MOUNTAIN_CAR: 2
-}
+from actor_critic import (OpenGymEnvs,ENV_TO_REWARD_THRESHOLD,
+                          ENV_TO_ACTION_SIZE,ENV_TO_STATE_SIZE,
+                          PolicyNetwork,ValueNetwork,STATE_SIZE,
+                          ACTION_SIZE)
 
 MAX_EPISODES = 2500
 RENDER = False
 
 
-class PolicyNetwork:
-    def __init__(self, learning_rate, neurons=12, name='policy_network', retrain=False, mountain_car=False,progressive = None):
+
+class PogressivePolicyNetwork:
+    def __init__(self, learning_rate,policy_source1,policy_source2, neurons=12, name='policy_network', retrain=False):
         self.learning_rate = learning_rate
         self.name = name
         self.init = tf.initializers.GlorotUniform()
-        self.prefix_var = ""
-        if progressive:
-            self.prefix_var = progressive
+
         with variable_scope(self.name):
             self.state = placeholder(
                 tf.float32, [None, STATE_SIZE], name="state")
@@ -75,7 +40,7 @@ class PolicyNetwork:
                 tf.float32, name="reware_per_episode")
             tf.compat.v1.summary.scalar('rewards', self.reward_per_episode)
             
-            self.W1 = get_variable(
+            self.W1_1 = get_variable(
                 f"{self.prefix_var}W1", [STATE_SIZE, neurons], initializer=self.init)
             self.b1 = get_variable(
                 f"{self.prefix_var}b1", [neurons], initializer=tf.zeros_initializer())
@@ -87,7 +52,7 @@ class PolicyNetwork:
                 self.W2 = get_variable(f"{self.prefix_var}W2_retrain", [neurons, ACTION_SIZE], initializer=GlorotNormal(seed=0))
                 self.b2 = get_variable(f"{self.prefix_var}b2_retrain", [ACTION_SIZE], initializer=tf.zeros_initializer())
 
-            self.Z1 = tf.add(tf.matmul(self.state, self.W1), self.b1)
+            self.Z1 = tf.add(tf.matmul(self.state, self.policy_source1.W1), self.b1)
             self.A1 = tf.nn.relu(self.Z1)
             if mountain_car:
                 self.output_mu = tf.add(tf.matmul(self.A1, self.W2), self.b2)
@@ -123,55 +88,10 @@ class PolicyNetwork:
             self.var_to_save = [self.W1, self.b1]
 
 
-class ValueNetwork:
-    def __init__(self, learning_rate, num_hidden_layers, num_neurons, name='value_network'):
-        self.learning_rate = learning_rate
-        self.num_neurons = num_neurons
-        self.num_hidden_layers = num_hidden_layers
-        with variable_scope(name):
-            self.state = placeholder(
-                tf.float32, [None, STATE_SIZE], name=f"{name}_state")
-            self.total_discounted_return = placeholder(
-                tf.float32, name=f"{name}_total_discounted_return")
-            self.delta = placeholder(tf.float32, name=f"{name}_delta")
-            self.var_to_save = []
-
-            W1 = get_variable(
-                f"{name}_W1", [STATE_SIZE, self.num_neurons], initializer=GlorotNormal(seed=0))
-            b1 = get_variable(
-                f"{name}_b1", [self.num_neurons], initializer=tf.zeros_initializer())
-            self.var_to_save.extend([W1, b1])
-            Z1 = tf.add(tf.matmul(self.state, W1), b1)
-            A = tf.nn.relu(Z1)
-
-            for i in range(2, self.num_hidden_layers + 1):
-                W = get_variable(f"{name}_W{i}", [
-                    self.num_neurons, self.num_neurons], initializer=GlorotNormal(seed=0))
-                b = get_variable(f"{name}_b{i}", [
-                    self.num_neurons], initializer=tf.zeros_initializer())
-                self.var_to_save.extend([W, b])
-                Z = tf.add(tf.matmul(A, W), b)
-                A = tf.nn.relu(Z)
-
-            W = get_variable(f"{name}_W{self.num_hidden_layers + 1}", [self.num_neurons, 1],
-                             initializer=GlorotNormal(seed=0))
-            b = get_variable(f"{name}_b{self.num_hidden_layers + 1}",
-                             [1], initializer=tf.zeros_initializer())
-            # linear activation function
-            self.final_output = tf.add(
-                tf.matmul(A, W), b, name=f"{name}_final_output")
-            # Softmax probability distribution over actions
-            self.loss = mean_squared_error(
-                self.total_discounted_return, self.final_output)
-            self.loss *= self.delta
-            self.optimizer = AdamOptimizer(
-                learning_rate=self.learning_rate).minimize(self.loss)
-
-
-class Agent:
-    def __init__(self, env_name):
-        self.env_name = env_name.value
-
+class ProgreesiveAgent:
+    def __init__(self, env_name,source_dict):
+        self.env_name = source_dict["out"]
+        self.source_dict = source_dict
         self.env = gym.make(self.env_name)
         self.convergence_treshold = ENV_TO_REWARD_THRESHOLD[env_name]
         self.original_action_size = ENV_TO_ACTION_SIZE[env_name]
@@ -184,8 +104,13 @@ class Agent:
 
         mountain_car = self.env_name == OpenGymEnvs.MOUNTAIN_CAR.value
 
-        self.policy = PolicyNetwork(
-            learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car)
+        self.policy_source1 = PolicyNetwork(
+            learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car,progressive = self.source_dict["input_1"])
+        self.policy_source2 = PolicyNetwork(
+            learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car,progressive = self.source_dict["input_2"])
+        self.policy_out = PolicyNetwork(
+            learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car,progressive = self.source_dict["out"])
+        
         self.value_function = ValueNetwork(
             learning_rate_value, num_hidden_layers, num_neurons_value)
 
@@ -194,8 +119,7 @@ class Agent:
         with Session() as sess:
             sess.run(global_variables_initializer())
 
-            if restore_sess:
-                saver.restore(sess, f"/tmp/{restore_sess}-model.ckpt")
+            saver.restore(sess, f"/tmp/{restore_sess}-model.ckpt")
 
             # initiate log files
             current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -292,61 +216,3 @@ class Agent:
                 sess, f"/tmp/{self.env_name + transfered}-model.ckpt")
             print("Model saved in path: %s" % save_path)
         return max(all_avg)
-
-
-def gridSearch(parmas, env_name, nSearch=100, maxN=False):
-    paramsList = list(ParameterGrid(parmas))
-    shuffle(paramsList)
-
-    #     if nSearch > len(paramsList) or maxN:
-    #         nSearch = len(paramsList)
-
-    gridSearchResults = []
-    agent = Agent(env_name)
-    for paramsDict in tqdm(paramsList[:nSearch]):
-        try:
-            print(paramsDict)
-            max_reward_avg = agent.run(**paramsDict)
-            paramsDict['max_average_reward_100_episodes'] = max_reward_avg
-            print(paramsDict)
-            gridSearchResults.append(paramsDict)
-        except Exception as e:
-            print(e)
-            print(paramsDict)
-            continue
-
-    hyperparameterTable = pd.DataFrame(gridSearchResults)
-    hyperparameterTable.sort_values(
-        "max_average_reward_100_episodes", inplace=True)
-    hyperparameterTable.to_csv(f"HP-{env_name.value}.csv")
-    print(hyperparameterTable)
-
-
-def run_grid_search(env):
-    params = {"discount_factor": [0.99, 0.9, 0.95],
-              "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
-              "learning_rate_value": [0.01, 0.001, 0.0001, 0.00001],
-              "num_hidden_layers": [2, 3, 5],
-              "num_neurons_value": [8, 16, 32, 64],
-              "num_neurons_policy": [8, 16, 32, 64]}
-
-    gridSearch(params, env)
-
-
-def run_grid_search_transfer(env, transfer, params):
-    params = {"discount_factor": [0.99, 0.9, 0.95],
-              "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
-              "learning_rate_value": [0.01, 0.001, 0.0001, 0.00001],
-              **params,
-              'restore_sess': [transfer]}
-    gridSearch(params, env)
-
-
-if __name__ == '__main__':
-    agent = Agent(OpenGymEnvs.MOUNTAIN_CAR)
-    best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
-                       'num_hidden_layers': 2, 'num_neurons_value': 64, 'num_neurons_policy': 40}
-
-    # run_grid_search(OpenGymEnvs.MOUNTAIN_CAR)
-    ret = agent.run(**best_parameters)
-    # ret = agent.run(**best_parameters,restore_sess = True)
