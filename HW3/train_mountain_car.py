@@ -12,7 +12,7 @@ def transfer_from_cartpole():
 def train_mountain_car():
     agent = Agent(OpenGymEnvs.MOUNTAIN_CAR)
     best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.00001, 'learning_rate_value': 0.0004,
-                       'num_hidden_layers': 1, 'num_neurons_value': 12, 'num_neurons_policy': 12}
+                       'num_hidden_layers': 2, 'num_neurons_value': 12, 'num_neurons_policy': 12}
     ret = agent.run(**best_parameters)
 
 

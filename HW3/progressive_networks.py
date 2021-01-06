@@ -1,62 +1,61 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Jan  6 20:20:33 2021
-
-@author: oxenb
-"""
 from datetime import datetime
+
 import gym
 import numpy as np
 import tensorflow as tf
+from tensorflow import concat
 from tensorflow.compat.v1 import Session
-
+from tensorflow.compat.v1 import placeholder
 from tensorflow.python.framework.ops import reset_default_graph
-# v2 tf embaded
+from tensorflow.python.ops.distributions.normal import Normal
+from tensorflow.python.ops.nn_ops import softmax_cross_entropy_with_logits_v2
+from tensorflow.python.ops.variable_scope import variable_scope
 from tensorflow.python.ops.variables import global_variables_initializer
-# v2 tf embaded
+from tensorflow.python.training.adam import AdamOptimizer
 from tensorflow.python.training.saver import Saver
-from actor_critic import (OpenGymEnvs,ENV_TO_REWARD_THRESHOLD,
-                          ENV_TO_ACTION_SIZE,ENV_TO_STATE_SIZE,
-                          PolicyNetwork,ValueNetwork,STATE_SIZE,
-                          ACTION_SIZE)
+
+from HW3.actor_critic import ACTION_SIZE
+from HW3.actor_critic import ENV_TO_ACTION_SIZE
+from HW3.actor_critic import ENV_TO_REWARD_THRESHOLD
+from HW3.actor_critic import ENV_TO_STATE_SIZE
+from HW3.actor_critic import OpenGymEnvs
+from HW3.actor_critic import PolicyNetwork
+from HW3.actor_critic import STATE_SIZE
+from HW3.actor_critic import ValueNetwork
 
 MAX_EPISODES = 2500
-RENDER = False
 
 
-
-class PogressivePolicyNetwork:
-    def __init__(self, learning_rate,policy_source1,policy_source2, neurons=12, name='policy_network', retrain=False):
+class ProgressivePolicyNetwork:
+    def __init__(self,
+                 learning_rate,
+                 policy_source1: PolicyNetwork,
+                 policy_source2: PolicyNetwork,
+                 policy_out: PolicyNetwork,
+                 mountain_car=None,
+                 name='progressive_policy_network'):
         self.learning_rate = learning_rate
         self.name = name
         self.init = tf.initializers.GlorotUniform()
 
         with variable_scope(self.name):
-            self.state = placeholder(
-                tf.float32, [None, STATE_SIZE], name="state")
             self.action = placeholder(tf.float32, [ACTION_SIZE], name="action")
             self.R_t = placeholder(tf.float32, name="total_rewards")
-            self.reward_per_episode = placeholder(
-                tf.float32, name="reware_per_episode")
+            self.reward_per_episode = placeholder(tf.float32, name="reware_per_episode")
             tf.compat.v1.summary.scalar('rewards', self.reward_per_episode)
-            
-            self.W1_1 = get_variable(
-                f"{self.prefix_var}W1", [STATE_SIZE, neurons], initializer=self.init)
-            self.b1 = get_variable(
-                f"{self.prefix_var}b1", [neurons], initializer=tf.zeros_initializer())
-            self.W2 = get_variable(
-                f"{self.prefix_var}W2", [neurons, ACTION_SIZE], initializer=self.init)
-            self.b2 = get_variable(
-                f"{self.prefix_var}b2", [ACTION_SIZE], initializer=tf.zeros_initializer())
-            if retrain:
-                self.W2 = get_variable(f"{self.prefix_var}W2_retrain", [neurons, ACTION_SIZE], initializer=GlorotNormal(seed=0))
-                self.b2 = get_variable(f"{self.prefix_var}b2_retrain", [ACTION_SIZE], initializer=tf.zeros_initializer())
 
-            self.Z1 = tf.add(tf.matmul(self.state, self.policy_source1.W1), self.b1)
-            self.A1 = tf.nn.relu(self.Z1)
+            ### Output network ###
+            A2_3_input = concat([policy_source1.A1, policy_source2.A1, policy_out.A1], axis=1)
+            concatenated_W2_3 = concat([policy_source1.W2, policy_source2.W2, policy_out.W2], axis=0)
+            concatenated_b2_3 = concat([policy_source1.b2, policy_source2.b2, policy_out.b2], axis=0)
+
+            Z2_1 = tf.add(tf.matmul(policy_source1.A1, policy_source1.W2), policy_source1.b2)
+            Z2_2 = tf.add(tf.matmul(policy_source2.A1, policy_source2.W2), policy_source2.b2)
+            Z2_3 = tf.add(tf.matmul(policy_out.A1, policy_out.W2), policy_out.b2)
+
             if mountain_car:
-                self.output_mu = tf.add(tf.matmul(self.A1, self.W2), self.b2)
-                self.output_var = tf.add(tf.matmul(self.A1, self.W2), self.b2)
+                self.output_mu = tf.add(tf.matmul(A2_3_input, concatenated_W2_3), concatenated_b2_3)
+                self.output_var = tf.add(tf.matmul(A2_3_input, concatenated_W2_3), concatenated_b2_3)
 
                 self.output_mu = tf.squeeze(self.output_mu)
                 self.output_var = tf.squeeze(self.output_var)
@@ -72,7 +71,7 @@ class PogressivePolicyNetwork:
                 # Add cross entropy cost to encourage exploration
                 # self.loss -= 1e-1 * self.normal_dist.entropy()
             else:
-                self.output = tf.add(tf.matmul(self.A1, self.W2), self.b2)
+                self.output = tf.add(tf.matmul(A2_3_input, concatenated_W2_3), concatenated_b2_3)
 
                 # Softmax probability distribution over actions
                 self.actions_distribution = tf.squeeze(
@@ -81,15 +80,16 @@ class PogressivePolicyNetwork:
                 self.neg_log_prob = softmax_cross_entropy_with_logits_v2(
                     logits=self.output, labels=self.actions_distribution)
                 self.loss = tf.reduce_mean(self.neg_log_prob * self.R_t)
+
+            self.vars_to_train = [policy_out.W1, policy_out.b1,
+                                  policy_out.W2, policy_out.b2]
             self.optimizer = AdamOptimizer(
-                learning_rate=self.learning_rate).minimize(self.loss)
+                learning_rate=self.learning_rate).minimize(self.loss, var_list=self.vars_to_train)
             self.merged = tf.compat.v1.summary.merge_all()
 
-            self.var_to_save = [self.W1, self.b1]
 
-
-class ProgreesiveAgent:
-    def __init__(self, env_name,source_dict):
+class ProgressiveAgent:
+    def __init__(self, env_name, source_dict):
         self.env_name = source_dict["out"]
         self.source_dict = source_dict
         self.env = gym.make(self.env_name)
@@ -97,36 +97,45 @@ class ProgreesiveAgent:
         self.original_action_size = ENV_TO_ACTION_SIZE[env_name]
         self.original_state_size = ENV_TO_STATE_SIZE[env_name]
 
-    def run(self, discount_factor, learning_rate, learning_rate_value,
-            num_hidden_layers, num_neurons_value, num_neurons_policy, restore_sess=None):
+    def run(self, discount_factor, learning_rate_policy, learning_rate_value,
+            num_hidden_layers, num_neurons_value, num_neurons_policy):
         # Initialize the policy network
         reset_default_graph()
 
         mountain_car = self.env_name == OpenGymEnvs.MOUNTAIN_CAR.value
 
         self.policy_source1 = PolicyNetwork(
-            learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car,progressive = self.source_dict["input_1"])
+            learning_rate_policy, num_neurons_policy, mountain_car=mountain_car,
+            progressive=self.source_dict["input_1"])
         self.policy_source2 = PolicyNetwork(
-            learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car,progressive = self.source_dict["input_2"])
-        self.policy_out = PolicyNetwork(
-            learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car,progressive = self.source_dict["out"])
-        
-        self.value_function = ValueNetwork(
-            learning_rate_value, num_hidden_layers, num_neurons_value)
+            learning_rate_policy, num_neurons_policy, mountain_car=mountain_car,
+            progressive=self.source_dict["input_2"])
 
-        saver = Saver(var_list=self.policy.var_to_save)
+        self.policy_out = PolicyNetwork(
+            learning_rate_policy, num_neurons_policy, mountain_car=mountain_car,
+            progressive=self.source_dict["out"])
+
+        self.progressive_policy = ProgressivePolicyNetwork(learning_rate_policy,
+                                                           self.policy_source1,
+                                                           self.policy_source2,
+                                                           self.policy_out,
+                                                           mountain_car=mountain_car)
+
+        self.value_function = ValueNetwork(learning_rate_value, num_hidden_layers, num_neurons_value)
+
+        saver = Saver(var_list=self.policy_source1.var_to_save + self.policy_source2.var_to_save)
 
         with Session() as sess:
             sess.run(global_variables_initializer())
 
-            saver.restore(sess, f"/tmp/{restore_sess}-model.ckpt")
+            saver.restore(sess, f"/tmp/{self.source_dict['input_1']}-for_transfer-model.ckpt")
+            saver.restore(sess, f"/tmp/{self.source_dict['input_2']}-for_transfer-model.ckpt")
 
             # initiate log files
             current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
-            train_log_dir = f'../logs/gradient_tape/{self.env_name}/' + \
-                            current_time + '/train'
-            train_summary_writer = tf.compat.v1.summary.FileWriter(
-                train_log_dir, sess.graph)
+            train_log_dir = (f'../logs/gradient_tape/{self.env_name}/' +
+                             current_time + '/train')
+            train_summary_writer = tf.compat.v1.summary.FileWriter(train_log_dir, sess.graph)
 
             all_avg = []
             solved = False
@@ -139,8 +148,10 @@ class ProgreesiveAgent:
                                            [1, STATE_SIZE])
                 I = 1
                 while True:
-                    actions_distribution = sess.run(self.policy.actions_distribution,
-                                                    {self.policy.state: current_state})
+                    actions_distribution = sess.run(self.progressive_policy.actions_distribution,
+                                                    {self.policy_source1.state: current_state,
+                                                     self.policy_source2.state: current_state,
+                                                     self.policy_out.state: current_state})
                     if not mountain_car:
                         actions_distribution = actions_distribution[:self.original_action_size]
                         actions_distribution = actions_distribution / actions_distribution.sum()
@@ -153,9 +164,6 @@ class ProgreesiveAgent:
                                             [1, STATE_SIZE])
 
                     episode_rewards[episode] += reward
-
-                    if RENDER:
-                        self.env.render()
 
                     current_state_prediction = sess.run([self.value_function.final_output],
                                                         {self.value_function.state: current_state,
@@ -180,14 +188,15 @@ class ProgreesiveAgent:
                         action_one_hot[0] = action[0]
                     else:
                         action_one_hot[action] = 1
-                    feed_dict = {self.policy.state: current_state,
-                                 self.policy.R_t: delta,
-                                 self.policy.action: action_one_hot,
-                                 self.policy.reward_per_episode: episode_rewards[episode]}
-                    _, loss, summary = sess.run([self.policy.optimizer,
-                                                 self.policy.loss,
-                                                 self.policy.merged],
-                                                feed_dict)
+                    feed_dict = {self.policy_source1.state: current_state,
+                                 self.policy_source2.state: current_state,
+                                 self.policy_out.state: current_state,
+                                 self.progressive_policy.R_t: delta,
+                                 self.progressive_policy.action: action_one_hot,
+                                 self.progressive_policy.reward_per_episode: episode_rewards[episode]}
+                    _, summary = sess.run([self.progressive_policy.optimizer,
+                                           self.progressive_policy.merged],
+                                          feed_dict)
 
                     if done:
                         if episode > 98:
@@ -211,8 +220,14 @@ class ProgreesiveAgent:
 
                 train_summary_writer.add_summary(summary, episode)
 
-            transfered = '-transfered' if restore_sess else ''
-            save_path = saver.save(
-                sess, f"/tmp/{self.env_name + transfered}-model.ckpt")
-            print("Model saved in path: %s" % save_path)
         return max(all_avg)
+
+
+if __name__ == '__main__':
+    transfer_dict = {'input_1': OpenGymEnvs.CARTPOLE.value,
+                     'input_2': OpenGymEnvs.ACROBOT.value,
+                     'out': OpenGymEnvs.MOUNTAIN_CAR.value}
+    agent = ProgressiveAgent(OpenGymEnvs.MOUNTAIN_CAR, transfer_dict)
+    parameters = {'discount_factor': 0.99, 'learning_rate_policy': 0.00001, 'learning_rate_value': 0.0004,
+                  'num_hidden_layers': 2, 'num_neurons_value': 12, 'num_neurons_policy': 12}
+    agent.run(**parameters)

@@ -1,6 +1,5 @@
 from HW3.actor_critic import Agent
 from HW3.actor_critic import OpenGymEnvs
-from HW3.actor_critic import run_grid_search_transfer
 
 
 def transfer_from_acrobot():
@@ -18,7 +17,7 @@ def train_cartpole():
 
 
 if __name__ == '__main__':
-    # train_cartpole()
+    train_cartpole()
     # transfer_from_acrobot()
-    run_grid_search_transfer(OpenGymEnvs.CARTPOLE, OpenGymEnvs.ACROBOT.value,
-                             {'num_hidden_layers': [3], 'num_neurons_value': [64], 'num_neurons_policy': [12]})
+    # run_grid_search_transfer(OpenGymEnvs.CARTPOLE, OpenGymEnvs.ACROBOT.value,
+    #                          {'num_hidden_layers': [3], 'num_neurons_value': [64], 'num_neurons_policy': [12]})

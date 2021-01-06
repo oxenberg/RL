@@ -23,7 +23,7 @@ from tensorflow.python.training.adam import AdamOptimizer
 from tensorflow.python.training.saver import Saver
 from tqdm import tqdm
 
-# np.random.seed(1)
+np.random.seed(1)
 tf.compat.v1.disable_eager_execution()
 
 STATE_SIZE = 6
@@ -59,7 +59,8 @@ RENDER = False
 
 
 class PolicyNetwork:
-    def __init__(self, learning_rate, neurons=12, name='policy_network', retrain=False, mountain_car=False,progressive = None):
+    def __init__(self, learning_rate, neurons=12, name='policy_network', retrain=False, mountain_car=False,
+                 progressive=None):
         self.learning_rate = learning_rate
         self.name = name
         self.init = tf.initializers.GlorotUniform()
@@ -74,7 +75,7 @@ class PolicyNetwork:
             self.reward_per_episode = placeholder(
                 tf.float32, name="reware_per_episode")
             tf.compat.v1.summary.scalar('rewards', self.reward_per_episode)
-            
+
             self.W1 = get_variable(
                 f"{self.prefix_var}W1", [STATE_SIZE, neurons], initializer=self.init)
             self.b1 = get_variable(
@@ -84,8 +85,10 @@ class PolicyNetwork:
             self.b2 = get_variable(
                 f"{self.prefix_var}b2", [ACTION_SIZE], initializer=tf.zeros_initializer())
             if retrain:
-                self.W2 = get_variable(f"{self.prefix_var}W2_retrain", [neurons, ACTION_SIZE], initializer=GlorotNormal(seed=0))
-                self.b2 = get_variable(f"{self.prefix_var}b2_retrain", [ACTION_SIZE], initializer=tf.zeros_initializer())
+                self.W2 = get_variable(f"{self.prefix_var}W2_retrain", [neurons, ACTION_SIZE],
+                                       initializer=GlorotNormal(seed=0))
+                self.b2 = get_variable(f"{self.prefix_var}b2_retrain", [ACTION_SIZE],
+                                       initializer=tf.zeros_initializer())
 
             self.Z1 = tf.add(tf.matmul(self.state, self.W1), self.b1)
             self.A1 = tf.nn.relu(self.Z1)
@@ -114,7 +117,7 @@ class PolicyNetwork:
                     tf.nn.softmax(self.output))
                 # Loss with negative log probability
                 self.neg_log_prob = softmax_cross_entropy_with_logits_v2(
-                    logits=self.output, labels=self.actions_distribution)
+                    logits=self.output, labels=self.action)
                 self.loss = tf.reduce_mean(self.neg_log_prob * self.R_t)
             self.optimizer = AdamOptimizer(
                 learning_rate=self.learning_rate).minimize(self.loss)
@@ -173,12 +176,12 @@ class Agent:
         self.env_name = env_name.value
 
         self.env = gym.make(self.env_name)
-        self.convergence_treshold = ENV_TO_REWARD_THRESHOLD[env_name]
+        self.convergence_threshold = ENV_TO_REWARD_THRESHOLD[env_name]
         self.original_action_size = ENV_TO_ACTION_SIZE[env_name]
         self.original_state_size = ENV_TO_STATE_SIZE[env_name]
 
     def run(self, discount_factor, learning_rate, learning_rate_value,
-            num_hidden_layers, num_neurons_value, num_neurons_policy, restore_sess=None):
+            num_hidden_layers, num_neurons_value, num_neurons_policy, restore_sess=None, for_transfer=False):
         # Initialize the policy network
         reset_default_graph()
 
@@ -274,7 +277,7 @@ class Agent:
                                                                                            episode_rewards[episode],
                                                                                            round(average_rewards, 2)))
                         all_avg.append(round(average_rewards, 2))
-                        if average_rewards >= self.convergence_treshold:
+                        if average_rewards >= self.convergence_threshold:
                             print(' Solved at episode: ' + str(episode))
                             solved = True
                         break
@@ -288,8 +291,9 @@ class Agent:
                 train_summary_writer.add_summary(summary, episode)
 
             transfered = '-transfered' if restore_sess else ''
+            for_transfer = '-for-transfer' if for_transfer else ''
             save_path = saver.save(
-                sess, f"/tmp/{self.env_name + transfered}-model.ckpt")
+                sess, f"/tmp/{self.env_name + transfered + for_transfer}-model.ckpt")
             print("Model saved in path: %s" % save_path)
         return max(all_avg)
 
