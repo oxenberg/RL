@@ -62,6 +62,7 @@ class PolicyNetwork:
     def __init__(self, learning_rate, neurons=12, name='policy_network', retrain=False, mountain_car=False):
         self.learning_rate = learning_rate
         self.name = name
+        self.init = tf.initializers.GlorotUniform()
         with variable_scope(self.name):
             self.state = placeholder(
                 tf.float32, [None, STATE_SIZE], name="state")
@@ -71,10 +72,14 @@ class PolicyNetwork:
                 tf.float32, name="reware_per_episode")
             tf.compat.v1.summary.scalar('rewards', self.reward_per_episode)
 
-            self.W1 = get_variable("W1", [STATE_SIZE, neurons], initializer=GlorotNormal(seed=0))
-            self.b1 = get_variable("b1", [neurons], initializer=tf.zeros_initializer())
-            self.W2 = get_variable("W2", [neurons, ACTION_SIZE], initializer=GlorotNormal(seed=0))
-            self.b2 = get_variable("b2", [ACTION_SIZE], initializer=tf.zeros_initializer())
+            self.W1 = get_variable(
+                "W1", [STATE_SIZE, neurons], initializer=self.init)
+            self.b1 = get_variable(
+                "b1", [neurons], initializer=tf.zeros_initializer())
+            self.W2 = get_variable(
+                "W2", [neurons, ACTION_SIZE], initializer=self.init)
+            self.b2 = get_variable(
+                "b2", [ACTION_SIZE], initializer=tf.zeros_initializer())
             if retrain:
                 self.W2 = get_variable("W2_retrain", [neurons, ACTION_SIZE], initializer=GlorotNormal(seed=0))
                 self.b2 = get_variable("b2_retrain", [ACTION_SIZE], initializer=tf.zeros_initializer())
@@ -301,6 +306,7 @@ def gridSearch(parmas, env_name, nSearch=100, maxN=False):
     agent = Agent(env_name)
     for paramsDict in tqdm(paramsList[:nSearch]):
         try:
+            print(paramsDict)
             max_reward_avg = agent.run(**paramsDict)
             paramsDict['max_average_reward_100_episodes'] = max_reward_avg
             print(paramsDict)
@@ -341,9 +347,6 @@ if __name__ == '__main__':
     agent = Agent(OpenGymEnvs.MOUNTAIN_CAR)
     best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
                        'num_hidden_layers': 2, 'num_neurons_value': 64, 'num_neurons_policy': 40}
-    #: mountain car
-    # best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.00002, 'learning_rate_value': 0.001,
-    #                   'num_hidden_layers': 2, 'num_neurons': 400}
 
     # run_grid_search(OpenGymEnvs.MOUNTAIN_CAR)
     ret = agent.run(**best_parameters)

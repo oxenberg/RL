@@ -4,7 +4,6 @@ from HW3.actor_critic import run_grid_search_transfer
 
 
 def transfer_from_acrobot():
-    ## compare to 221656
     agent = Agent(OpenGymEnvs.CARTPOLE)
     best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
                        'num_hidden_layers': 3, 'num_neurons_value': 64, 'num_neurons_policy': 12}
