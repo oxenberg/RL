@@ -23,7 +23,7 @@ from tensorflow.python.training.adam import AdamOptimizer
 from tensorflow.python.training.saver import Saver
 from tqdm import tqdm
 
-np.random.seed(1)
+# np.random.seed(1)
 tf.compat.v1.disable_eager_execution()
 
 STATE_SIZE = 6
@@ -54,15 +54,14 @@ ENV_TO_STATE_SIZE = {
     OpenGymEnvs.MOUNTAIN_CAR: 2
 }
 
-MAX_EPISODES = 5000
+MAX_EPISODES = 2500
 RENDER = False
 
 
 class PolicyNetwork:
-    def __init__(self, learning_rate, name='policy_network', retrain=False, mountain_car=False):
+    def __init__(self, learning_rate, neurons=12, name='policy_network', retrain=False, mountain_car=False):
         self.learning_rate = learning_rate
         self.name = name
-        self.neurons = 40
         with variable_scope(self.name):
             self.state = placeholder(
                 tf.float32, [None, STATE_SIZE], name="state")
@@ -72,19 +71,13 @@ class PolicyNetwork:
                 tf.float32, name="reware_per_episode")
             tf.compat.v1.summary.scalar('rewards', self.reward_per_episode)
 
-            self.W1 = get_variable(
-                "W1", [STATE_SIZE, self.neurons], initializer=GlorotNormal(seed=0))
-            self.b1 = get_variable(
-                "b1", [self.neurons], initializer=tf.zeros_initializer())
-            self.W2 = get_variable(
-                "W2", [self.neurons, ACTION_SIZE], initializer=GlorotNormal(seed=0))
-            self.b2 = get_variable(
-                "b2", [ACTION_SIZE], initializer=tf.zeros_initializer())
+            self.W1 = get_variable("W1", [STATE_SIZE, neurons], initializer=GlorotNormal(seed=0))
+            self.b1 = get_variable("b1", [neurons], initializer=tf.zeros_initializer())
+            self.W2 = get_variable("W2", [neurons, ACTION_SIZE], initializer=GlorotNormal(seed=0))
+            self.b2 = get_variable("b2", [ACTION_SIZE], initializer=tf.zeros_initializer())
             if retrain:
-                self.W2 = get_variable(
-                    "W2_retrain", [self.neurons, ACTION_SIZE], initializer=GlorotNormal(seed=0))
-                self.b2 = get_variable(
-                    "b2_retrain", [ACTION_SIZE], initializer=tf.zeros_initializer())
+                self.W2 = get_variable("W2_retrain", [neurons, ACTION_SIZE], initializer=GlorotNormal(seed=0))
+                self.b2 = get_variable("b2_retrain", [ACTION_SIZE], initializer=tf.zeros_initializer())
 
             self.Z1 = tf.add(tf.matmul(self.state, self.W1), self.b1)
             self.A1 = tf.nn.relu(self.Z1)
@@ -98,13 +91,11 @@ class PolicyNetwork:
                 self.normal_dist = Normal(self.output_mu, self.output_var)
                 self.sampled_action = tf.squeeze(
                     self.normal_dist._sample_n(1), axis=0)
-                self.actions_distribution = tf.clip_by_value(
-                    self.sampled_action, -1, 1)
+                self.actions_distribution = tf.clip_by_value(self.sampled_action, -1, 1)
                 # Loss and train op
 
-                self.loss = - \
-                    tf.math.log(self.normal_dist.prob(
-                        tf.squeeze(self.action)) + 1e-5) * self.R_t
+                self.loss = - tf.math.log(self.normal_dist.prob(
+                    tf.squeeze(self.action)) + 1e-5) * self.R_t
                 # Add cross entropy cost to encourage exploration
                 # self.loss -= 1e-1 * self.normal_dist.entropy()
             else:
@@ -115,7 +106,7 @@ class PolicyNetwork:
                     tf.nn.softmax(self.output))
                 # Loss with negative log probability
                 self.neg_log_prob = softmax_cross_entropy_with_logits_v2(
-                    logits=self.output, labels=self.action)
+                    logits=self.output, labels=self.actions_distribution)
                 self.loss = tf.reduce_mean(self.neg_log_prob * self.R_t)
             self.optimizer = AdamOptimizer(
                 learning_rate=self.learning_rate).minimize(self.loss)
@@ -151,9 +142,9 @@ class ValueNetwork:
 
             for i in range(2, self.num_hidden_layers + 1):
                 W = get_variable(f"{name}_W{i}", [
-                                 self.num_neurons, self.num_neurons], initializer=GlorotNormal(seed=0))
+                    self.num_neurons, self.num_neurons], initializer=GlorotNormal(seed=0))
                 b = get_variable(f"{name}_b{i}", [
-                                 self.num_neurons], initializer=tf.zeros_initializer())
+                    self.num_neurons], initializer=tf.zeros_initializer())
                 self.var_to_save.extend([W, b])
                 Z = tf.add(tf.matmul(A, W), b)
                 A = tf.nn.relu(Z)
@@ -183,16 +174,16 @@ class Agent:
         self.original_state_size = ENV_TO_STATE_SIZE[env_name]
 
     def run(self, discount_factor, learning_rate, learning_rate_value,
-            num_hidden_layers, num_neurons, restore_sess=None):
+            num_hidden_layers, num_neurons_value, num_neurons_policy, restore_sess=None):
         # Initialize the policy network
         reset_default_graph()
 
         mountain_car = self.env_name == OpenGymEnvs.MOUNTAIN_CAR.value
 
         self.policy = PolicyNetwork(
-            learning_rate, retrain=restore_sess is not None, mountain_car=mountain_car)
+            learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car)
         self.value_function = ValueNetwork(
-            learning_rate_value, num_hidden_layers, num_neurons)
+            learning_rate_value, num_hidden_layers, num_neurons_value)
 
         saver = Saver(var_list=self.policy.var_to_save)
 
@@ -205,7 +196,7 @@ class Agent:
             # initiate log files
             current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
             train_log_dir = f'../logs/gradient_tape/{self.env_name}/' + \
-                current_time + '/train'
+                            current_time + '/train'
             train_summary_writer = tf.compat.v1.summary.FileWriter(
                 train_log_dir, sess.graph)
 
@@ -246,10 +237,10 @@ class Agent:
                                                       self.value_function.total_discounted_return: reward})
 
                     reward_estemation = reward + \
-                        (1 - int(done)) * discount_factor * \
-                        next_state_prediction[0][0][0]
+                                        (1 - int(done)) * discount_factor * \
+                                        next_state_prediction[0][0][0]
                     delta = reward_estemation - \
-                        current_state_prediction[0][0][0]
+                            current_state_prediction[0][0][0]
                     delta *= I
 
                     sess.run([self.value_function.optimizer], {self.value_function.state: current_state,
@@ -299,7 +290,7 @@ class Agent:
         return max(all_avg)
 
 
-def gridSearch(parmas, env_name, nSearch=10, maxN=False):
+def gridSearch(parmas, env_name, nSearch=100, maxN=False):
     paramsList = list(ParameterGrid(parmas))
     shuffle(paramsList)
 
@@ -316,6 +307,7 @@ def gridSearch(parmas, env_name, nSearch=10, maxN=False):
             gridSearchResults.append(paramsDict)
         except Exception as e:
             print(e)
+            print(paramsDict)
             continue
 
     hyperparameterTable = pd.DataFrame(gridSearchResults)
@@ -330,15 +322,25 @@ def run_grid_search(env):
               "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
               "learning_rate_value": [0.01, 0.001, 0.0001, 0.00001],
               "num_hidden_layers": [2, 3, 5],
-              "num_neurons": [8, 16, 32, 64]}
+              "num_neurons_value": [8, 16, 32, 64],
+              "num_neurons_policy": [8, 16, 32, 64]}
 
+    gridSearch(params, env)
+
+
+def run_grid_search_transfer(env, transfer, params):
+    params = {"discount_factor": [0.99, 0.9, 0.95],
+              "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
+              "learning_rate_value": [0.01, 0.001, 0.0001, 0.00001],
+              **params,
+              'restore_sess': [transfer]}
     gridSearch(params, env)
 
 
 if __name__ == '__main__':
     agent = Agent(OpenGymEnvs.MOUNTAIN_CAR)
     best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
-                       'num_hidden_layers': 2, 'num_neurons': 64}
+                       'num_hidden_layers': 2, 'num_neurons_value': 64, 'num_neurons_policy': 40}
     #: mountain car
     # best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.00002, 'learning_rate_value': 0.001,
     #                   'num_hidden_layers': 2, 'num_neurons': 400}
