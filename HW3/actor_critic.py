@@ -240,7 +240,8 @@ class Agent:
             for episode in range(MAX_EPISODES):
                 current_state = self.env.reset()
                 current_state = self._pad_state(current_state)
-                current_state = scale_state(scaler, current_state)
+                if mountain_car:
+                    current_state = scale_state(scaler, current_state)
 
                 I = 1
                 while True:
