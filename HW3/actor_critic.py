@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from sklearn.model_selection import ParameterGrid
+from sklearn.preprocessing import StandardScaler
 from tensorflow.compat.v1 import Session
 from tensorflow.compat.v1 import placeholder
 from tensorflow.compat.v1.losses import mean_squared_error
@@ -23,7 +24,7 @@ from tensorflow.python.training.adam import AdamOptimizer
 from tensorflow.python.training.saver import Saver
 from tqdm import tqdm
 
-np.random.seed(1)
+# np.random.seed(1)
 tf.compat.v1.disable_eager_execution()
 
 STATE_SIZE = 6
@@ -63,7 +64,7 @@ class PolicyNetwork:
                  progressive=None):
         self.learning_rate = learning_rate
         self.name = name
-        self.init = tf.initializers.GlorotUniform()
+        self.init = tf.initializers.GlorotNormal()
         self.prefix_var = ""
         if progressive:
             self.prefix_var = progressive
@@ -171,6 +172,12 @@ class ValueNetwork:
                 learning_rate=self.learning_rate).minimize(self.loss)
 
 
+# function to normalize states
+def scale_state(scaler, state):  # requires input shape=(2,)
+    scaled = scaler.transform(state)
+    return scaled
+
+
 class Agent:
     def __init__(self, env_name):
         self.env_name = env_name.value
@@ -180,12 +187,23 @@ class Agent:
         self.original_action_size = ENV_TO_ACTION_SIZE[env_name]
         self.original_state_size = ENV_TO_STATE_SIZE[env_name]
 
+    def _pad_state(self, state):
+        return np.reshape(np.pad(state, (0, STATE_SIZE - self.original_state_size)),
+                          [1, STATE_SIZE])
+
     def run(self, discount_factor, learning_rate, learning_rate_value,
             num_hidden_layers, num_neurons_value, num_neurons_policy, restore_sess=None, for_transfer=False):
         # Initialize the policy network
         reset_default_graph()
 
         mountain_car = self.env_name == OpenGymEnvs.MOUNTAIN_CAR.value
+
+        if mountain_car:
+            state_space_samples = np.array(
+                [self._pad_state(self.env.observation_space.sample())
+                 for x in range(10000)]).reshape(10000, STATE_SIZE)
+            scaler = StandardScaler()
+            scaler.fit(state_space_samples)
 
         self.policy = PolicyNetwork(
             learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car)
@@ -214,22 +232,25 @@ class Agent:
 
             for episode in range(MAX_EPISODES):
                 current_state = self.env.reset()
-                current_state = np.reshape(np.pad(current_state, (0, STATE_SIZE - self.original_state_size)),
-                                           [1, STATE_SIZE])
+                current_state = self._pad_state(current_state)
+                current_state = scale_state(scaler, current_state)
+
                 I = 1
                 while True:
                     actions_distribution = sess.run(self.policy.actions_distribution,
                                                     {self.policy.state: current_state})
-                    if not mountain_car:
+                    if mountain_car:
+                        action = [actions_distribution[0]]
+                    else:
                         actions_distribution = actions_distribution[:self.original_action_size]
                         actions_distribution = actions_distribution / actions_distribution.sum()
                         action = np.random.choice(
                             np.arange(self.original_action_size), p=actions_distribution)
-                    else:
-                        action = [actions_distribution[0]]
+
                     next_state, reward, done, _ = self.env.step(action)
-                    next_state = np.reshape(np.pad(next_state, (0, STATE_SIZE - self.original_state_size)),
-                                            [1, STATE_SIZE])
+                    next_state = self._pad_state(next_state)
+                    if mountain_car:
+                        next_state = scale_state(scaler, next_state)
 
                     episode_rewards[episode] += reward
 
@@ -239,6 +260,7 @@ class Agent:
                     current_state_prediction = sess.run([self.value_function.final_output],
                                                         {self.value_function.state: current_state,
                                                          self.value_function.total_discounted_return: reward})
+
                     next_state_prediction = sess.run([self.value_function.final_output],
                                                      {self.value_function.state: next_state,
                                                       self.value_function.total_discounted_return: reward})
@@ -348,8 +370,8 @@ def run_grid_search_transfer(env, transfer, params):
 
 if __name__ == '__main__':
     agent = Agent(OpenGymEnvs.MOUNTAIN_CAR)
-    best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.0001, 'learning_rate_value': 0.001,
-                       'num_hidden_layers': 2, 'num_neurons_value': 64, 'num_neurons_policy': 40}
+    best_parameters = {'discount_factor': 0.99, 'learning_rate': 0.00002, 'learning_rate_value': 0.001,
+                       'num_hidden_layers': 2, 'num_neurons_value': 400, 'num_neurons_policy': 40}
 
     # run_grid_search(OpenGymEnvs.MOUNTAIN_CAR)
     ret = agent.run(**best_parameters)
