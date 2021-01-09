@@ -55,7 +55,7 @@ ENV_TO_STATE_SIZE = {
     OpenGymEnvs.MOUNTAIN_CAR: 2
 }
 
-MAX_EPISODES = 2500
+MAX_EPISODES = 100
 RENDER = False
 
 
@@ -204,9 +204,16 @@ class Agent:
                  for x in range(10000)]).reshape(10000, STATE_SIZE)
             scaler = StandardScaler()
             scaler.fit(state_space_samples)
-
-        self.policy = PolicyNetwork(
-            learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car)
+        
+        #: add name env to varibles 
+        if for_transfer:
+            self.policy = PolicyNetwork(
+                learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car,
+                progressive=self.env_name)
+        else:
+            self.policy = PolicyNetwork(
+                learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car)
+            
         self.value_function = ValueNetwork(
             learning_rate_value, num_hidden_layers, num_neurons_value)
 

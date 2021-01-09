@@ -131,8 +131,8 @@ class ProgressiveAgent:
         with Session() as sess:
             sess.run(global_variables_initializer())
 
-            saver.restore(sess, f"/tmp/{self.source_dict['input_1']}-for_transfer-model.ckpt")
-            saver.restore(sess, f"/tmp/{self.source_dict['input_2']}-for_transfer-model.ckpt")
+            saver.restore(sess, f"/tmp/{self.source_dict['input_1']}-for-transfer-model.ckpt")
+            saver.restore(sess, f"/tmp/{self.source_dict['input_2']}-for-transfer-model.ckpt")
 
             # initiate log files
             current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
