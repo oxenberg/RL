@@ -55,7 +55,7 @@ ENV_TO_STATE_SIZE = {
     OpenGymEnvs.MOUNTAIN_CAR: 2
 }
 
-MAX_EPISODES = 100
+MAX_EPISODES = 2500
 RENDER = False
 
 
@@ -125,6 +125,7 @@ class PolicyNetwork:
             self.merged = tf.compat.v1.summary.merge_all()
 
             self.var_to_save = [self.W1, self.b1]
+            self.var_to_save_progressive = [self.W1, self.b1,self.W2,self.b2]
 
 
 class ValueNetwork:
@@ -216,8 +217,12 @@ class Agent:
             
         self.value_function = ValueNetwork(
             learning_rate_value, num_hidden_layers, num_neurons_value)
-
-        saver = Saver(var_list=self.policy.var_to_save)
+        
+        
+        if for_transfer:
+            saver = Saver(var_list=self.policy.var_to_save_progressive)
+        else:
+            saver = Saver(var_list=self.policy.var_to_save)
 
         with Session() as sess:
             sess.run(global_variables_initializer())
