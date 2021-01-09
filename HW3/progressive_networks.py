@@ -14,14 +14,14 @@ from tensorflow.python.ops.variables import global_variables_initializer
 from tensorflow.python.training.adam import AdamOptimizer
 from tensorflow.python.training.saver import Saver
 
-from HW3.actor_critic import ACTION_SIZE
-from HW3.actor_critic import ENV_TO_ACTION_SIZE
-from HW3.actor_critic import ENV_TO_REWARD_THRESHOLD
-from HW3.actor_critic import ENV_TO_STATE_SIZE
-from HW3.actor_critic import OpenGymEnvs
-from HW3.actor_critic import PolicyNetwork
-from HW3.actor_critic import STATE_SIZE
-from HW3.actor_critic import ValueNetwork
+from actor_critic import ACTION_SIZE
+from actor_critic import ENV_TO_ACTION_SIZE
+from actor_critic import ENV_TO_REWARD_THRESHOLD
+from actor_critic import ENV_TO_STATE_SIZE
+from actor_critic import OpenGymEnvs
+from actor_critic import PolicyNetwork
+from actor_critic import STATE_SIZE
+from actor_critic import ValueNetwork
 
 MAX_EPISODES = 2500
 
@@ -45,17 +45,20 @@ class ProgressivePolicyNetwork:
             tf.compat.v1.summary.scalar('rewards', self.reward_per_episode)
 
             ### Output network ###
-            A2_3_input = concat([policy_source1.A1, policy_source2.A1, policy_out.A1], axis=1)
-            concatenated_W2_3 = concat([policy_source1.W2, policy_source2.W2, policy_out.W2], axis=0)
-            concatenated_b2_3 = concat([policy_source1.b2, policy_source2.b2, policy_out.b2], axis=0)
+            # A2_3_input = concat([policy_source1.A1, policy_source2.A1, policy_out.A1], axis=1)
+            # concatenated_W2_3 = concat([policy_source1.W2, policy_source2.W2, policy_out.W2], axis=0)
+            # concatenated_b2_3 = concat([policy_source1.b2, policy_source2.b2, policy_out.b2], axis=0)
 
             Z2_1 = tf.add(tf.matmul(policy_source1.A1, policy_source1.W2), policy_source1.b2)
             Z2_2 = tf.add(tf.matmul(policy_source2.A1, policy_source2.W2), policy_source2.b2)
             Z2_3 = tf.add(tf.matmul(policy_out.A1, policy_out.W2), policy_out.b2)
-
+            
             if mountain_car:
-                self.output_mu = tf.add(tf.matmul(A2_3_input, concatenated_W2_3), concatenated_b2_3)
-                self.output_var = tf.add(tf.matmul(A2_3_input, concatenated_W2_3), concatenated_b2_3)
+                # self.output_mu = tf.add(tf.matmul(A2_3_input, concatenated_W2_3), concatenated_b2_3)
+                # self.output_var = tf.add(tf.matmul(A2_3_input, concatenated_W2_3), concatenated_b2_3)
+                
+                self.output_mu = tf.math.add_n([Z2_1, Z2_2, Z2_3])
+                self.output_var = tf.math.add_n([Z2_1, Z2_2, Z2_3])
 
                 self.output_mu = tf.squeeze(self.output_mu)
                 self.output_var = tf.squeeze(self.output_var)
@@ -71,8 +74,8 @@ class ProgressivePolicyNetwork:
                 # Add cross entropy cost to encourage exploration
                 # self.loss -= 1e-1 * self.normal_dist.entropy()
             else:
-                self.output = tf.add(tf.matmul(A2_3_input, concatenated_W2_3), concatenated_b2_3)
-
+                # self.output = tf.add(tf.matmul(A2_3_input, concatenated_W2_3), concatenated_b2_3)
+                self.output = tf.math.add_n([Z2_1, Z2_2, Z2_3])
                 # Softmax probability distribution over actions
                 self.actions_distribution = tf.squeeze(
                     tf.nn.softmax(self.output))
