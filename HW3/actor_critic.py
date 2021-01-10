@@ -108,8 +108,6 @@ class PolicyNetwork:
 
                 self.loss = - tf.math.log(self.normal_dist.prob(
                     tf.squeeze(self.action)) + 1e-5) * self.R_t
-                # Add cross entropy cost to encourage exploration
-                # self.loss -= 1e-1 * self.normal_dist.entropy()
             else:
                 self.output = tf.add(tf.matmul(self.A1, self.W2), self.b2)
 
@@ -125,7 +123,7 @@ class PolicyNetwork:
             self.merged = tf.compat.v1.summary.merge_all()
 
             self.var_to_save = [self.W1, self.b1]
-            self.var_to_save_progressive = [self.W1, self.b1,self.W2,self.b2]
+            self.var_to_save_progressive = [self.W1, self.b1, self.W2, self.b2]
 
 
 class ValueNetwork:
@@ -205,8 +203,8 @@ class Agent:
                  for x in range(10000)]).reshape(10000, STATE_SIZE)
             scaler = StandardScaler()
             scaler.fit(state_space_samples)
-        
-        #: add name env to varibles 
+
+        #: add name env to variables
         if for_transfer:
             self.policy = PolicyNetwork(
                 learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car,
@@ -214,11 +212,10 @@ class Agent:
         else:
             self.policy = PolicyNetwork(
                 learning_rate, num_neurons_policy, retrain=restore_sess is not None, mountain_car=mountain_car)
-            
+
         self.value_function = ValueNetwork(
             learning_rate_value, num_hidden_layers, num_neurons_value)
-        
-        
+
         if for_transfer:
             saver = Saver(var_list=self.policy.var_to_save_progressive)
         else:
@@ -387,5 +384,5 @@ if __name__ == '__main__':
                        'num_hidden_layers': 2, 'num_neurons_value': 400, 'num_neurons_policy': 40}
 
     # run_grid_search(OpenGymEnvs.MOUNTAIN_CAR)
-    ret = agent.run(**best_parameters)
+    ret = agent.run(**best_parameters, for_transfer=True)
     # ret = agent.run(**best_parameters,restore_sess = True)

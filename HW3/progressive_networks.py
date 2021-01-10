@@ -3,21 +3,8 @@ from random import shuffle
 
 import gym
 import numpy as np
-import tensorflow as tf
 import pandas as pd
-from tqdm import tqdm
-
-from tensorflow import concat
-from tensorflow.compat.v1 import Session
-from tensorflow.compat.v1 import placeholder
-from tensorflow.python.framework.ops import reset_default_graph
-from tensorflow.python.ops.distributions.normal import Normal
-from tensorflow.python.ops.nn_ops import softmax_cross_entropy_with_logits_v2
-from tensorflow.python.ops.variable_scope import variable_scope
-from tensorflow.python.ops.variables import global_variables_initializer
-from tensorflow.python.training.adam import AdamOptimizer
-from tensorflow.python.training.saver import Saver
-
+import tensorflow as tf
 from actor_critic import ACTION_SIZE
 from actor_critic import ENV_TO_ACTION_SIZE
 from actor_critic import ENV_TO_REWARD_THRESHOLD
@@ -27,14 +14,21 @@ from actor_critic import PolicyNetwork
 from actor_critic import STATE_SIZE
 from actor_critic import ValueNetwork
 from actor_critic import scale_state
-
-
-from train_mountain_car import getBestParamsMountain
+from sklearn.model_selection import ParameterGrid
+from sklearn.preprocessing import StandardScaler
+from tensorflow.compat.v1 import Session
+from tensorflow.compat.v1 import placeholder
+from tensorflow.python.framework.ops import reset_default_graph
+from tensorflow.python.ops.distributions.normal import Normal
+from tensorflow.python.ops.nn_ops import softmax_cross_entropy_with_logits_v2
+from tensorflow.python.ops.variable_scope import variable_scope
+from tensorflow.python.ops.variables import global_variables_initializer
+from tensorflow.python.training.adam import AdamOptimizer
+from tensorflow.python.training.saver import Saver
+from tqdm import tqdm
 from train_acrobot import getBestParamsAcro
 from train_cartpole import getBestParamsCart
-
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import ParameterGrid
+from train_mountain_car import getBestParamsMountain
 
 MAX_EPISODES = 700
 
@@ -57,11 +51,10 @@ class ProgressivePolicyNetwork:
             self.reward_per_episode = placeholder(tf.float32, name="reware_per_episode")
             tf.compat.v1.summary.scalar('rewards', self.reward_per_episode)
 
-          
             Z2_1 = tf.add(tf.matmul(policy_source1.A1, policy_source1.W2), policy_source1.b2)
             Z2_2 = tf.add(tf.matmul(policy_source2.A1, policy_source2.W2), policy_source2.b2)
             Z2_3 = tf.add(tf.matmul(policy_out.A1, policy_out.W2), policy_out.b2)
-            
+
             if mountain_car:
                 self.output_mu = tf.math.add_n([Z2_1, Z2_2, Z2_3])
                 self.output_var = tf.math.add_n([Z2_1, Z2_2, Z2_3])
@@ -103,14 +96,14 @@ class ProgressiveAgent:
         self.convergence_treshold = ENV_TO_REWARD_THRESHOLD[env_name]
         self.original_action_size = ENV_TO_ACTION_SIZE[env_name]
         self.original_state_size = ENV_TO_STATE_SIZE[env_name]
-        
-    def _pad_state(self, state):
-         return np.reshape(np.pad(state, (0, STATE_SIZE - self.original_state_size)),
-                           [1, STATE_SIZE])
 
-    def run(self, discount_factor, learning_rate_value,learning_rate,
-        num_hidden_layers, num_neurons_value,input_1_parms,input_2_parms,out_parms):
-        
+    def _pad_state(self, state):
+        return np.reshape(np.pad(state, (0, STATE_SIZE - self.original_state_size)),
+                          [1, STATE_SIZE])
+
+    def run(self, discount_factor, learning_rate_value, learning_rate,
+            num_hidden_layers, num_neurons_value, input_1_parms, input_2_parms, out_parms):
+
         reset_default_graph()
 
         mountain_car = self.env_name == OpenGymEnvs.MOUNTAIN_CAR.value
@@ -121,7 +114,7 @@ class ProgressiveAgent:
                  for x in range(10000)]).reshape(10000, STATE_SIZE)
             scaler = StandardScaler()
             scaler.fit(state_space_samples)
-        
+
         # Initialize the policy network
 
         self.policy_source1 = PolicyNetwork(
@@ -147,7 +140,7 @@ class ProgressiveAgent:
         self.value_function = ValueNetwork(learning_rate_value, num_hidden_layers, num_neurons_value)
 
         saver_source1 = Saver(var_list=self.policy_source1.var_to_save_progressive)
-        saver_source2 = Saver(var_list= self.policy_source2.var_to_save_progressive)
+        saver_source2 = Saver(var_list=self.policy_source2.var_to_save_progressive)
 
         with Session() as sess:
             sess.run(global_variables_initializer())
@@ -168,13 +161,12 @@ class ProgressiveAgent:
 
             for episode in range(MAX_EPISODES):
                 current_state = self.env.reset()
-                
+
                 current_state = self._pad_state(current_state)
 
                 if mountain_car:
-                       current_state = scale_state(scaler, current_state)
-                       
-                       
+                    current_state = scale_state(scaler, current_state)
+
                 I = 1
                 while True:
                     actions_distribution = sess.run(self.progressive_policy.actions_distribution,
@@ -190,11 +182,10 @@ class ProgressiveAgent:
                         action = [actions_distribution[0]]
                     next_state, reward, done, _ = self.env.step(action)
                     next_state = self._pad_state(next_state)
- 
+
                     if mountain_car:
                         next_state = scale_state(scaler, next_state)
-                        
-                        
+
                     episode_rewards[episode] += reward
 
                     current_state_prediction = sess.run([self.value_function.final_output],
@@ -258,7 +249,7 @@ class ProgressiveAgent:
         return max(all_avg)
 
 
-def gridSearch(parmas, env_name,transfer_dict, nSearch=100, maxN=False):
+def gridSearch(parmas, env_name, transfer_dict, nSearch=100, maxN=False):
     paramsList = list(ParameterGrid(parmas))
     shuffle(paramsList)
 
@@ -266,7 +257,7 @@ def gridSearch(parmas, env_name,transfer_dict, nSearch=100, maxN=False):
     #         nSearch = len(paramsList)
 
     gridSearchResults = []
-    agent = ProgressiveAgent(env_name,transfer_dict)
+    agent = ProgressiveAgent(env_name, transfer_dict)
     for paramsDict in tqdm(paramsList[:nSearch]):
         try:
             print(paramsDict)
@@ -286,70 +277,69 @@ def gridSearch(parmas, env_name,transfer_dict, nSearch=100, maxN=False):
     print(hyperparameterTable)
 
 
-def run_grid_search_transfer(params,env,transfer_dict):
+def run_grid_search_transfer(params, env, transfer_dict):
     params = {"discount_factor": [0.99, 0.95],
               "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
               "learning_rate_value": [0.01, 0.001, 0.0001, 0.00001],
               **params}
-    gridSearch(params, env,transfer_dict)
+    gridSearch(params, env, transfer_dict)
 
 
-    
-def progressiveCART_ACRO__MOUBTAIN(grid_search = False):
+def progressiveCART_ACRO__MOUNTAIN(grid_search=False):
     transfer_dict = {'input_1': OpenGymEnvs.CARTPOLE.value,
-                  'input_2': OpenGymEnvs.ACROBOT.value,
-                  'out': OpenGymEnvs.MOUNTAIN_CAR.value}
+                     'input_2': OpenGymEnvs.ACROBOT.value,
+                     'out': OpenGymEnvs.MOUNTAIN_CAR.value}
     agent = ProgressiveAgent(OpenGymEnvs.MOUNTAIN_CAR, transfer_dict)
-    
+
     CARTPOLE_parms = getBestParamsCart()
     ACROBOT_parms = getBestParamsAcro()
     MOUNTAIN_CAR_parms = getBestParamsMountain()
-    
+
     learning_rate = MOUNTAIN_CAR_parms["learning_rate"]
-    
-    if grid_search : 
+
+    if grid_search:
         grid_params = {'num_hidden_layers': 2,
-                  'num_neurons_value': 12, "input_1_parms" : CARTPOLE_parms,"input_2_parms" :ACROBOT_parms,
-                  "out_parms" : MOUNTAIN_CAR_parms
-                  }
-    
+                       'num_neurons_value': 12, "input_1_parms": CARTPOLE_parms, "input_2_parms": ACROBOT_parms,
+                       "out_parms": MOUNTAIN_CAR_parms
+                       }
+
         run_grid_search_transfer()
     else:
-        parameters = { 'discount_factor': 0.99, 'learning_rate_value': 0.0004,'num_hidden_layers': 2,
-                  'num_neurons_value': 12, "input_1_parms" : CARTPOLE_parms,"input_2_parms" :ACROBOT_parms,
-                  "out_parms" : MOUNTAIN_CAR_parms,"learning_rate" : learning_rate
-                  }
+        parameters = {'discount_factor': 0.99, 'learning_rate_value': 0.0004, 'num_hidden_layers': 2,
+                      'num_neurons_value': 12, "input_1_parms": CARTPOLE_parms, "input_2_parms": ACROBOT_parms,
+                      "out_parms": MOUNTAIN_CAR_parms, "learning_rate": learning_rate
+                      }
         agent.run(**parameters)
-    
-def progressiveACRO_MOUNTAIN__CART(grid_search = False):
-    
+
+
+def progressiveACRO_MOUNTAIN__CART(grid_search=False):
     env_name = OpenGymEnvs.CARTPOLE
     transfer_dict = {'input_1': OpenGymEnvs.MOUNTAIN_CAR.value,
-                  'input_2': OpenGymEnvs.ACROBOT.value,
-                  'out': OpenGymEnvs.CARTPOLE.value}
+                     'input_2': OpenGymEnvs.ACROBOT.value,
+                     'out': OpenGymEnvs.CARTPOLE.value}
     agent = ProgressiveAgent(env_name, transfer_dict)
-    
+
     CARTPOLE_parms = getBestParamsCart()
     ACROBOT_parms = getBestParamsAcro()
     MOUNTAIN_CAR_parms = getBestParamsMountain()
-    
+
     learning_rate = CARTPOLE_parms["learning_rate"]
-    
-    
-    if grid_search : 
-        grid_params = {'num_hidden_layers': [2,4,6,8,12],
-                  'num_neurons_value': [100,10,50], "input_1_parms" : [MOUNTAIN_CAR_parms] ,"input_2_parms" :[ACROBOT_parms],
-                  "out_parms" :[CARTPOLE_parms]
-                  }
-    
-        run_grid_search_transfer(grid_params, env_name,transfer_dict)
+
+    if grid_search:
+        grid_params = {'num_hidden_layers': [2, 4, 6, 8, 12],
+                       'num_neurons_value': [100, 10, 50], "input_1_parms": [MOUNTAIN_CAR_parms],
+                       "input_2_parms": [ACROBOT_parms],
+                       "out_parms": [CARTPOLE_parms]
+                       }
+
+        run_grid_search_transfer(grid_params, env_name, transfer_dict)
     else:
-        parameters = { 'discount_factor': 0.99, 'learning_rate_value': 0.0004,'num_hidden_layers': 2,
-                  'num_neurons_value': 12, "input_1_parms" : CARTPOLE_parms,"input_2_parms" :ACROBOT_parms,
-                  "out_parms" : MOUNTAIN_CAR_parms,"learning_rate" : learning_rate
-                  }
+        parameters = {'discount_factor': 0.99, 'learning_rate_value': 0.0004, 'num_hidden_layers': 2,
+                      'num_neurons_value': 12, "input_1_parms": CARTPOLE_parms, "input_2_parms": ACROBOT_parms,
+                      "out_parms": MOUNTAIN_CAR_parms, "learning_rate": learning_rate
+                      }
         agent.run(**parameters)
-        
-        
+
+
 if __name__ == '__main__':
-   progressiveACRO_MOUNTAIN__CART(grid_search = True)  ## need to replace by section
+    progressiveACRO_MOUNTAIN__CART(grid_search=True)  ## need to replace by section
